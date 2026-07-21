@@ -32,6 +32,12 @@
   .turnlist { display:flex; flex-wrap:wrap; gap:6px; }
   .turn { padding:4px 8px; border:1px solid var(--line); border-radius:6px; font-size:13px; }
   .turn.gone { opacity:.35; text-decoration: line-through; }
+  .cols { display:flex; align-items:flex-end; gap:4px; height:160px; margin:12px 0; }
+  .col { flex:1; background:var(--accent); border-radius:3px 3px 0 0; min-height:2px; }
+  .col.alt { background:#7a9c7a; }
+  .split2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  @media (max-width:640px) { .split2 { grid-template-columns:1fr; } }
+  details { margin:12px 0; }
 </style>
 </head>
 <body>
@@ -186,6 +192,32 @@ function encodeDetailed(ranks, text) {
 
 function heuristicCount(text) {
   return Math.max(1, Math.round(text.length / 3.8));
+}
+
+function burnSeries({ baseTokens, turns }) {
+  const series = [];
+  let history = 0;
+  let cumulative = 0;
+  for (const turn of turns) {
+    const processed = baseTokens + history + turn.in;
+    cumulative += processed;
+    series.push({ processed, cumulative });
+    history += turn.in + turn.out;
+  }
+  return series;
+}
+
+function splitChats({ baseTokens, turns, chatLength }) {
+  const series = [];
+  let cumulative = 0;
+  for (let start = 0; start < turns.length; start += chatLength) {
+    const chunk = turns.slice(start, start + chatLength);
+    for (const point of burnSeries({ baseTokens, turns: chunk })) {
+      cumulative += point.processed;
+      series.push({ processed: point.processed, cumulative });
+    }
+  }
+  return series;
 }
 /* LOGIC:END */
 
@@ -362,7 +394,55 @@ function initWindow(root) {
 
   render();
 }
-function initBurn(root) { root.textContent = 'todo'; }
+function initBurn(root) {
+  const TURNS = 20;
+  const turns = Array.from({ length: TURNS }, () => ({ in: 220, out: 520 }));
+  const baseTokens = CONFIG.systemPromptTokens + CONFIG.attachments[0].tokens;
+
+  const long = burnSeries({ baseTokens, turns });
+  const split = splitChats({ baseTokens, turns, chatLength: 7 });
+
+  const dollars = (tokens) => (tokens / 1e6 * CONFIG.apiRates.inputPerMTok).toFixed(2);
+
+  root.innerHTML = `
+    <p>Every time you hit send, the model re-reads the whole conversation. Turn 20 is not the same
+    size as turn 1 — it carries all nineteen turns before it.</p>
+    <div class="split2">
+      <div>
+        <h3>One long chat</h3>
+        <div class="cols" id="b-long"></div>
+        <p class="muted">Total processed: <b>${long.at(-1).cumulative.toLocaleString()}</b> tokens</p>
+      </div>
+      <div>
+        <h3>Same work, a fresh chat every 7 turns</h3>
+        <div class="cols" id="b-split"></div>
+        <p class="muted">Total processed: <b>${split.at(-1).cumulative.toLocaleString()}</b> tokens</p>
+      </div>
+    </div>
+    <p>That is <b>${(long.at(-1).cumulative / split.at(-1).cumulative).toFixed(1)}×</b> more work for
+    the same conversation — which is why a long chat gets slower and eats your usage limit faster.</p>
+    <details>
+      <summary>If you were paying API rates instead of a subscription</summary>
+      <p class="muted">Long chat ≈ $${dollars(long.at(-1).cumulative)} versus
+      $${dollars(split.at(-1).cumulative)} split. ${CONFIG.apiRates.note}.</p>
+    </details>
+    <p class="takeaway">Start a new chat when the topic changes. Attach the document once, in the
+    chat that needs it.</p>`;
+
+  const peak = long.at(-1).processed;
+  const draw = (id, series, cls) => {
+    const box = root.querySelector(id);
+    for (const point of series) {
+      const col = document.createElement('div');
+      col.className = `col ${cls}`;
+      col.style.height = `${(point.processed / peak) * 100}%`;
+      col.title = `${point.processed.toLocaleString()} tokens processed this turn`;
+      box.append(col);
+    }
+  };
+  draw('#b-long', long, '');
+  draw('#b-split', split, 'alt');
+}
 function initHaystack(root) { root.textContent = 'todo'; }
 function runSelfTest() { /* todo */ }
 
