@@ -254,9 +254,19 @@ const PRESETS = [
   { label: 'whitespace', text: 'lots     of      spaces\n\n\nand blank lines' }
 ];
 
+// Rendering one <span> per token gets visibly slow past a few thousand DOM
+// nodes, so the chip view stops here; the token/char/ratio stats above still
+// reflect the full (truncated-at-20,000-chars) text, so a long paste can show
+// a token count higher than the chips on screen — the note under the chips
+// explains the gap.
+const MAX_CHIPS = 1200;
+
 function initTokenizer(root) {
   root.innerHTML = `
     <p>Type anything. The model never sees your letters — it sees these chunks.</p>
+    <p class="muted">Counted with <code>cl100k_base</code>, a published tokenizer standing in for
+    ${CONFIG.model}'s own, which Anthropic has not published. Counts are accurate to within a few
+    percent, and every effect this page shows holds for Claude too.</p>
     <div class="presets"></div>
     <textarea id="tk-input">Tokens are the unit models actually read.</textarea>
     <p class="muted" id="tk-trunc" style="display:none">Only counting the first 20,000 characters — the rest is ignored below.</p>
@@ -266,6 +276,8 @@ function initTokenizer(root) {
       <div><b id="tk-ratio">0</b><br><span class="muted">characters per token</span></div>
     </div>
     <div class="chips" id="tk-chips"></div>
+    <p class="muted" id="tk-chip-cap" style="display:none">Showing the first ${MAX_CHIPS.toLocaleString()}
+    chunks — the token count above includes the rest, they just aren't drawn.</p>
     <p class="takeaway">Common words are usually a single chunk, so the model never actually sees the
     letters inside them — that's why it miscounts them. Rarer words and other languages shatter into
     many chunks instead of one, which can cost several times as much of your context for the same
@@ -290,8 +302,14 @@ function initTokenizer(root) {
     root.querySelector('#tk-chars').textContent = text.length.toLocaleString();
     root.querySelector('#tk-ratio').textContent = count ? (text.length / count).toFixed(1) : '0';
     chips.textContent = '';
-    if (APPROXIMATE) { chips.innerHTML = '<span class="muted">Chunk view needs the tokenizer, which did not load.</span>'; return; }
-    for (const tok of encodeDetailed(RANKS, text).slice(0, 1200)) {
+    if (APPROXIMATE) {
+      chips.innerHTML = '<span class="muted">Chunk view needs the tokenizer, which did not load.</span>';
+      root.querySelector('#tk-chip-cap').style.display = 'none';
+      return;
+    }
+    const tokens = encodeDetailed(RANKS, text);
+    root.querySelector('#tk-chip-cap').style.display = tokens.length > MAX_CHIPS ? '' : 'none';
+    for (const tok of tokens.slice(0, MAX_CHIPS)) {
       const el = document.createElement('span');
       el.className = 'chip';
       el.textContent = tok.text.replace(/\n/g, '\\n');
@@ -624,23 +642,29 @@ function runSelfTest() {
   document.body.style.paddingBottom = `${strip.offsetHeight}px`;
 }
 
-const dots = document.createElement('nav');
-dots.id = 'dots';
-for (const s of document.querySelectorAll('section')) {
-  const a = document.createElement('a');
-  a.href = `#${s.id}`;
-  a.title = s.querySelector('h2').textContent;
-  dots.append(a);
-}
-document.body.append(dots);
-const sections = [...document.querySelectorAll('section')];
-const spy = new IntersectionObserver(entries => {
-  for (const e of entries) {
-    const i = sections.indexOf(e.target);
-    if (i >= 0) dots.children[i].classList.toggle('on', e.isIntersecting);
+// Guarded: this runs at top-level script scope before boot(), so a missing
+// IntersectionObserver would otherwise throw synchronously and take the
+// whole page down with it. Losing the scroll dots is fine; losing the demos
+// is not.
+if (typeof IntersectionObserver === 'function') {
+  const dots = document.createElement('nav');
+  dots.id = 'dots';
+  for (const s of document.querySelectorAll('section')) {
+    const a = document.createElement('a');
+    a.href = `#${s.id}`;
+    a.title = s.querySelector('h2').textContent;
+    dots.append(a);
   }
-}, { rootMargin: '-40% 0px -40% 0px' });
-sections.forEach(s => spy.observe(s));
+  document.body.append(dots);
+  const sections = [...document.querySelectorAll('section')];
+  const spy = new IntersectionObserver(entries => {
+    for (const e of entries) {
+      const i = sections.indexOf(e.target);
+      if (i >= 0) dots.children[i].classList.toggle('on', e.isIntersecting);
+    }
+  }, { rootMargin: '-40% 0px -40% 0px' });
+  sections.forEach(s => spy.observe(s));
+}
 
 async function boot() {
   try {
