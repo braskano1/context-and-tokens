@@ -25,6 +25,13 @@
   button { background:var(--pane); color:var(--fg); border:1px solid var(--line); border-radius:999px; padding:6px 12px; font:inherit; cursor:pointer; }
   button:hover { border-color:var(--accent); }
   .takeaway { border-left:3px solid var(--accent); padding-left:12px; margin:16px 0; }
+  .bar { display:flex; height:44px; border:1px solid var(--line); border-radius:8px; overflow:hidden; margin:14px 0; }
+  .seg { display:flex; align-items:center; justify-content:center; font-size:12px; overflow:hidden; white-space:nowrap; transition: width .35s ease; }
+  .seg-sys { background:#3d5a80; } .seg-att { background:#8a5a44; } .seg-hist { background:#4f7942; } .seg-reply { background:#5c4b8a; } .seg-free { background:#20242d; }
+  .bar.overflow { border-color: var(--warn); box-shadow: 0 0 0 2px var(--warn) inset; }
+  .turnlist { display:flex; flex-wrap:wrap; gap:6px; }
+  .turn { padding:4px 8px; border:1px solid var(--line); border-radius:6px; font-size:13px; }
+  .turn.gone { opacity:.35; text-decoration: line-through; }
 </style>
 </head>
 <body>
@@ -60,6 +67,32 @@ const TEST_VECTORS = [{"text":"hello world","ids":[15339,1917]},{"text":"strawbe
 const RECORDED_RUN = null; /* RUN:INJECTED */
 
 function sum(xs) { return xs.reduce((a, b) => a + b, 0); }
+
+function packContext({ windowTokens, systemTokens, replyReserve, attachments, turns }) {
+  const attachmentTokens = sum(attachments);
+  const fixed = systemTokens + attachmentTokens;
+  const budget = windowTokens - replyReserve - fixed;
+  const kept = [];
+  const dropped = [];
+  let historyTokens = 0;
+  for (let i = turns.length - 1; i >= 0; i--) {
+    if (budget > 0 && historyTokens + turns[i] <= budget) {
+      historyTokens += turns[i];
+      kept.unshift(i);
+    } else {
+      dropped.unshift(i);
+    }
+  }
+  return {
+    attachmentTokens,
+    historyTokens,
+    usedTokens: fixed + historyTokens,
+    freeTokens: Math.max(0, budget - historyTokens),
+    kept,
+    dropped,
+    overflow: budget < 0
+  };
+}
 
 const CL100K_PAT = /'(?:[sSdDmMtT]|[lL][lL]|[vV][eE]|[rR][eE])|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+/gu;
 const TEXT_ENCODER = new TextEncoder();
@@ -217,7 +250,108 @@ function initTokenizer(root) {
   input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(render, 120); });
   render();
 }
-function initWindow(root) { root.textContent = 'todo'; }
+function initWindow(root) {
+  const state = { attachments: [], turns: [], pasted: 0 };
+
+  root.innerHTML = `
+    <p>Everything the model can hold at once — ${CONFIG.windowTokens.toLocaleString()} tokens for
+    ${CONFIG.model}. It all shares one bar.</p>
+    <div class="bar" id="w-bar"></div>
+    <div class="presets" id="w-controls">
+      <button data-act="turn">+ chat turn</button>
+      <button data-act="reset">reset</button>
+    </div>
+    <p class="muted" id="w-summary"></p>
+    <div class="turnlist" id="w-turns"></div>
+    <p>Paste your own text to see it measured against the window:</p>
+    <textarea id="w-paste" placeholder="Paste an email, a report, anything."></textarea>
+    <p class="takeaway" id="w-takeaway">When the bar is full, the oldest turns fall out of it.
+    That is what "it forgot what I said" actually means.</p>`;
+
+  const controls = root.querySelector('#w-controls');
+  for (const att of CONFIG.attachments) {
+    const b = document.createElement('button');
+    b.textContent = `+ ${att.label}`;
+    b.onclick = () => { state.attachments.push(att.tokens); render(); };
+    controls.prepend(b);
+  }
+  controls.querySelector('[data-act="turn"]').onclick = () => {
+    state.turns.push(900 + Math.round(state.turns.length * 260));
+    render();
+  };
+  controls.querySelector('[data-act="reset"]').onclick = () => {
+    state.attachments = []; state.turns = []; state.pasted = 0;
+    root.querySelector('#w-paste').value = '';
+    render();
+  };
+
+  const paste = root.querySelector('#w-paste');
+  let timer;
+  paste.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const text = paste.value.slice(0, 200000);
+      if (paste.value.length > 200000) {
+        paste.value = text;
+      }
+      state.pasted = text ? countTokens(text) : 0;
+      render();
+    }, 120);
+  });
+
+  function render() {
+    const attachments = state.pasted ? [...state.attachments, state.pasted] : state.attachments;
+    const r = packContext({
+      windowTokens: CONFIG.windowTokens,
+      systemTokens: CONFIG.systemPromptTokens,
+      replyReserve: CONFIG.replyReserveTokens,
+      attachments,
+      turns: state.turns
+    });
+    // Segment tokens always sum to exactly `denom`, and denom is never smaller
+    // than the window, so segment widths (tokens / denom) never sum past 100%
+    // no matter how far over budget the attachments push things. Without this,
+    // an oversized attachment would make the segments' percentages add up to
+    // well over 100%, which the flexbox bar would then silently squeeze or
+    // clip — a full-looking bar that hides exactly the overflow it exists to show.
+    const demand = CONFIG.systemPromptTokens + r.attachmentTokens + r.historyTokens + CONFIG.replyReserveTokens;
+    const denom = Math.max(CONFIG.windowTokens, demand);
+    const segs = [
+      ['seg-sys', CONFIG.systemPromptTokens, 'instructions'],
+      ['seg-att', r.attachmentTokens, 'attached'],
+      ['seg-hist', r.historyTokens, 'chat history'],
+      ['seg-free', r.freeTokens, 'free'],
+      ['seg-reply', CONFIG.replyReserveTokens, 'room to reply']
+    ];
+    const bar = root.querySelector('#w-bar');
+    bar.classList.toggle('overflow', r.overflow);
+    bar.textContent = '';
+    for (const [cls, tokens, label] of segs) {
+      const el = document.createElement('div');
+      el.className = `seg ${cls}`;
+      const pct = (tokens / denom) * 100;
+      el.style.width = `${pct}%`;
+      el.textContent = pct > 6 ? label : '';
+      el.title = `${label}: ${tokens.toLocaleString()} tokens`;
+      bar.append(el);
+    }
+    root.querySelector('#w-summary').textContent = r.overflow
+      ? (CONFIG.systemPromptTokens + r.attachmentTokens > CONFIG.windowTokens
+        ? `Instructions and attachments alone are ${(CONFIG.systemPromptTokens + r.attachmentTokens).toLocaleString()} tokens — more than the whole ${CONFIG.windowTokens.toLocaleString()}-token window. Nothing else fits.`
+        : `Instructions, attachments, and history leave no room to reserve a reply — the model has nowhere left to answer.`)
+      : `${r.usedTokens.toLocaleString()} of ${CONFIG.windowTokens.toLocaleString()} tokens used · ${r.dropped.length} turn(s) pushed out`;
+    const list = root.querySelector('#w-turns');
+    list.textContent = '';
+    state.turns.forEach((tokens, i) => {
+      const el = document.createElement('span');
+      el.className = 'turn' + (r.dropped.includes(i) ? ' gone' : '');
+      el.textContent = `turn ${i + 1} · ${tokens.toLocaleString()}`;
+      list.append(el);
+    });
+  }
+
+  render();
+}
 function initBurn(root) { root.textContent = 'todo'; }
 function initHaystack(root) { root.textContent = 'todo'; }
 function runSelfTest() { /* todo */ }
