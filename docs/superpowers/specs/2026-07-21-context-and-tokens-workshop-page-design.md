@@ -33,7 +33,8 @@ over `file://`. Roughly 1.5 MB because the tokenizer vocabulary is embedded.
 - Each demo is an independent module — `initTokenizer(root)`, `initWindow(root)`, `initBurn(root)`,
   `initHaystack(root)`. They share exactly one dependency: `tokenize(text) -> number[]`.
   Replacing the tokenizer touches nothing else.
-- Tokenizer: real BPE (`o200k_base`), vocabulary embedded as base64 + gzip and decoded once at
+- Tokenizer: real BPE (`cl100k_base` — chosen over `o200k_base` because its ranks file inlines to
+  about 1.5 MB instead of 3 MB, with the same teaching value), vocabulary embedded as base64 + gzip and decoded once at
   load via `DecompressionStream`. Brief loading state, then every demo is live.
 - No CDN scripts, no web fonts, no analytics.
 
@@ -90,7 +91,7 @@ Four rules of thumb: new chat per topic; put the question first; attach once; sh
 
 ## Data and accuracy
 
-**Tokenizer fidelity.** Claude's exact tokenizer is not published. The page bundles `o200k_base`,
+**Tokenizer fidelity.** Claude's exact tokenizer is not published. The page bundles `cl100k_base`,
 a real published BPE, and says so plainly: a close stand-in, counts accurate within a few percent,
 individual splits illustrative. Every phenomenon demonstrated — subword chunks, other languages
 costing more, emoji — holds for Claude as well.
