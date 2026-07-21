@@ -26,7 +26,7 @@
   button:hover { border-color:var(--accent); }
   .takeaway { border-left:3px solid var(--accent); padding-left:12px; margin:16px 0; }
   .bar { display:flex; height:44px; border:1px solid var(--line); border-radius:8px; overflow:hidden; margin:14px 0; }
-  .seg { display:flex; align-items:center; justify-content:center; font-size:12px; overflow:hidden; white-space:nowrap; transition: width .35s ease; }
+  .seg { display:flex; align-items:center; justify-content:center; font-size:12px; overflow:hidden; white-space:nowrap; }
   .seg-sys { background:#3d5a80; } .seg-att { background:#8a5a44; } .seg-hist { background:#4f7942; } .seg-reply { background:#5c4b8a; } .seg-free { background:#20242d; }
   .bar.overflow { border-color: var(--warn); box-shadow: 0 0 0 2px var(--warn) inset; }
   .turnlist { display:flex; flex-wrap:wrap; gap:6px; }
@@ -34,6 +34,21 @@
   .turn.gone { opacity:.35; text-decoration: line-through; }
   .cols { display:flex; align-items:flex-end; gap:4px; height:160px; margin:12px 0; }
   .col { flex:1; background:var(--accent); border-radius:3px 3px 0 0; min-height:2px; }
+  /* Motion is layered on top of the rules above, which already describe the
+     correct at-rest appearance (full segment widths, full column heights,
+     dimmed/struck evicted turns). Nothing in this block may be required for
+     an element to reach its correct final state — only for how it gets there. */
+  @media (prefers-reduced-motion: no-preference) {
+    .seg { transition: width .35s ease; }
+    .turn { transition: opacity .3s ease; }
+    /* .grow is only ever applied by JS after confirming IntersectionObserver
+       exists and the user hasn't asked for reduced motion, and a fallback
+       timer always adds .in even if the observer never fires — see
+       armGrowIn(). So a column can rely on .col's own height/min-height for
+       its real size; this transform is a purely visual reveal on top. */
+    .col.grow { transform: scaleY(0); transform-origin: bottom; }
+    .col.grow.in { transform: scaleY(1); transition: transform .45s ease-out; }
+  }
   .col.alt { background:#7a9c7a; }
   .col.mid { background:var(--warn); }
   .h-vals, .h-pos { display:flex; gap:4px; text-align:center; }
@@ -244,6 +259,41 @@ let RANKS = null;
 let APPROXIMATE = false;
 let countTokens = () => 0;
 
+const REDUCE_MOTION = typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Staggered grow-in for column charts (demo 3's two burn-rate charts, demo
+// 4's recall curve). `cols` elements are expected to already be at their
+// correct final height/appearance by the time this is called — that is the
+// default, unconditional state. Everything here only adds a *reveal* on top:
+// if IntersectionObserver is unavailable, or the user prefers reduced
+// motion, this function does nothing and the columns are simply already
+// showing at full size. If the observer exists but never fires (e.g. a
+// background/hidden tab), a fallback timer still reveals the columns so a
+// chart can never get stuck invisible.
+function armGrowIn(container, cols) {
+  if (REDUCE_MOTION || typeof IntersectionObserver !== 'function' || !cols.length) return;
+  cols.forEach((col, i) => {
+    col.classList.add('grow');
+    col.style.transitionDelay = `${i * 20}ms`;
+  });
+  let revealed = false;
+  const reveal = () => {
+    if (revealed) return;
+    revealed = true;
+    for (const col of cols) col.classList.add('in');
+    obs.disconnect();
+    clearTimeout(fallback);
+  };
+  const obs = new IntersectionObserver(entries => {
+    for (const e of entries) {
+      if (e.isIntersecting) { reveal(); return; }
+    }
+  }, { threshold: 0.15 });
+  obs.observe(container);
+  const fallback = setTimeout(reveal, 2000);
+}
+
 const PRESETS = [
   { label: 'strawberry', text: 'How many r\'s are in strawberry?' },
   { label: 'rare word', text: 'Antidisestablishmentarianism is unfalsifiable.' },
@@ -324,6 +374,11 @@ function initTokenizer(root) {
 }
 function initWindow(root) {
   const state = { attachments: [], turns: [], pasted: 0 };
+  // Tracks which turn indices were already evicted as of the previous
+  // render(), so a fresh render (which rebuilds every <span> from scratch)
+  // can tell a newly-evicted turn from one that has been struck through
+  // since a prior click — only the former should play the fall-out fade.
+  let prevDropped = new Set();
 
   root.innerHTML = `
     <p>Everything the model can hold at once — ${CONFIG.windowTokens.toLocaleString()} tokens for
@@ -427,12 +482,27 @@ function initWindow(root) {
       : `${r.usedTokens.toLocaleString()} of ${CONFIG.windowTokens.toLocaleString()} tokens used · ${r.dropped.length} turn(s) pushed out`;
     const list = root.querySelector('#w-turns');
     list.textContent = '';
+    const dropped = new Set(r.dropped);
+    const newlyDropped = [];
     state.turns.forEach((tokens, i) => {
       const el = document.createElement('span');
-      el.className = 'turn' + (r.dropped.includes(i) ? ' gone' : '');
+      const isNew = dropped.has(i) && !prevDropped.has(i);
+      // Newly-evicted turns are appended WITHOUT '.gone' so they paint once
+      // in their normal state; '.gone' (and the fade it triggers) is added
+      // a couple of frames later. Turns dropped in an earlier render are
+      // created already-'.gone' — that's a no-op state, not an animation,
+      // so history never replays.
+      el.className = 'turn' + (dropped.has(i) && !isNew ? ' gone' : '');
       el.textContent = `turn ${i + 1} · ${tokens.toLocaleString()}`;
       list.append(el);
+      if (isNew) newlyDropped.push(el);
     });
+    if (newlyDropped.length) {
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        for (const el of newlyDropped) el.classList.add('gone');
+      }));
+    }
+    prevDropped = dropped;
   }
 
   render();
@@ -474,13 +544,16 @@ function initBurn(root) {
   const peak = long.at(-1).processed;
   const draw = (id, series, cls) => {
     const box = root.querySelector(id);
+    const cols = [];
     for (const point of series) {
       const col = document.createElement('div');
       col.className = `col ${cls}`;
       col.style.height = `${(point.processed / peak) * 100}%`;
       col.title = `${point.processed.toLocaleString()} tokens processed this turn`;
       box.append(col);
+      cols.push(col);
     }
+    armGrowIn(box, cols);
   };
   draw('#b-long', long, '');
   draw('#b-split', split, 'alt');
@@ -577,6 +650,7 @@ function initHaystack(root) {
       <p class="takeaway">Put your actual question first, and keep the material short enough that
       the answer is not buried.</p>`;
     const box = root.querySelector('#h-curve');
+    const cols = [];
     for (const p of LITERATURE_CURVE.points) {
       const isMiddle = p.depth > 0 && p.depth < 1;
       const col = document.createElement('div');
@@ -584,7 +658,9 @@ function initHaystack(root) {
       col.style.height = `${p.accuracy * 100}%`;
       col.title = `${Math.round(p.depth * 100)}% through the document: ${Math.round(p.accuracy * 100)}% recall (approximate)`;
       box.append(col);
+      cols.push(col);
     }
+    armGrowIn(box, cols);
     appendLivePanel(root);
     return;
   }
