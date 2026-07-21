@@ -108,6 +108,24 @@
       padding-top: 32px;
       padding-bottom: 40px;
     }
+    /* Vertical rhythm tightened for the slide deck only — the h2's 2.4em
+       top margin, generous paragraph spacing, and fixed 160px chart height
+       are all sized for a page that scrolls past them once, not a heading
+       that's already at the top of its own screen. Continuous scroll below
+       the breakpoint is untouched: none of this exists outside this query.
+       .cols scales with viewport height instead of a fixed px so demo 3's
+       two charts (which share one class and one media-query value) and
+       demo 4's curve all shrink together, in proportion, at shorter
+       screens — relative bar heights within and across charts don't change,
+       only the container's overall scale does. */
+    .slide h2 { margin-top: 0; margin-bottom: .4em; }
+    .slide h3 { margin: .5em 0 .3em; }
+    .slide p { margin: .5em 0; }
+    .slide .takeaway { margin: 10px 0; }
+    .slide .presets { margin: 8px 0; }
+    .slide .chips { margin: 8px 0; }
+    .slide details { margin: 8px 0; }
+    .slide .cols { height: clamp(120px, 20vh, 160px); }
   }
 </style>
 </head>
