@@ -75,11 +75,13 @@ function packContext({ windowTokens, systemTokens, replyReserve, attachments, tu
   const kept = [];
   const dropped = [];
   let historyTokens = 0;
+  let stopped = false;
   for (let i = turns.length - 1; i >= 0; i--) {
-    if (budget > 0 && historyTokens + turns[i] <= budget) {
+    if (!stopped && budget > 0 && historyTokens + turns[i] <= budget) {
       historyTokens += turns[i];
       kept.unshift(i);
     } else {
+      stopped = true;
       dropped.unshift(i);
     }
   }
@@ -259,6 +261,7 @@ function initWindow(root) {
     <div class="bar" id="w-bar"></div>
     <div class="presets" id="w-controls">
       <button data-act="turn">+ chat turn</button>
+      <button data-act="turn10">+ 10 chat turns</button>
       <button data-act="reset">reset</button>
     </div>
     <p class="muted" id="w-summary"></p>
@@ -275,8 +278,15 @@ function initWindow(root) {
     b.onclick = () => { state.attachments.push(att.tokens); render(); };
     controls.prepend(b);
   }
-  controls.querySelector('[data-act="turn"]').onclick = () => {
+  function addTurn() {
     state.turns.push(900 + Math.round(state.turns.length * 260));
+  }
+  controls.querySelector('[data-act="turn"]').onclick = () => {
+    addTurn();
+    render();
+  };
+  controls.querySelector('[data-act="turn10"]').onclick = () => {
+    for (let i = 0; i < 10; i++) addTurn();
     render();
   };
   controls.querySelector('[data-act="reset"]').onclick = () => {

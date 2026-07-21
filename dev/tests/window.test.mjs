@@ -29,3 +29,9 @@ test('an attachment larger than the window is reported, not silently dropped', (
   const r = packContext({ ...base, attachments: [5000] });
   assert.equal(r.overflow, true);
 });
+
+test('eviction is contiguous: a large turn stops all older turns from being kept, even ones that would fit on their own', () => {
+  const r = packContext({ ...base, turns: [50, 680, 50] });
+  assert.deepEqual(r.kept, [2]);
+  assert.deepEqual(r.dropped, [0, 1]);
+});
