@@ -160,7 +160,8 @@ let APPROXIMATE = false;
 let countTokens = () => 0;
 
 const PRESETS = [
-  { label: 'strawberry', text: 'How many r\'s are in "strawberry"?' },
+  { label: 'strawberry', text: 'How many r\'s are in strawberry?' },
+  { label: 'rare word', text: 'Antidisestablishmentarianism is unfalsifiable.' },
   { label: 'emoji', text: 'Ship it 🍓🚀 — emoji are expensive 🎉' },
   { label: 'numbers', text: 'Invoice 1234567890 for 42 units at 19.99' },
   { label: 'same idea, Arabic', text: 'This sentence costs far less in English.\nهذه الجملة نفسها تكلف ضعف عدد الرموز تقريبًا.' },
@@ -179,8 +180,10 @@ function initTokenizer(root) {
       <div><b id="tk-ratio">0</b><br><span class="muted">characters per token</span></div>
     </div>
     <div class="chips" id="tk-chips"></div>
-    <p class="takeaway">This is why it miscounts letters in a word, and why the same sentence in
-    another language can cost three times as much of your context.</p>`;
+    <p class="takeaway">Common words are usually a single chunk, so the model never actually sees the
+    letters inside them — that's why it miscounts them. Rarer words and other languages shatter into
+    many chunks instead of one, which can cost several times as much of your context for the same
+    meaning (almost five times, in the Arabic example above).</p>`;
 
   const input = root.querySelector('#tk-input');
   const chips = root.querySelector('#tk-chips');
