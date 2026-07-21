@@ -34,6 +34,24 @@
   .turn.gone { opacity:.35; text-decoration: line-through; }
   .cols { display:flex; align-items:flex-end; gap:4px; height:160px; margin:12px 0; }
   .col { flex:1; background:var(--accent); border-radius:3px 3px 0 0; min-height:2px; }
+  /* Demo 3 only: both burn charts are split into the same three task groups
+     (7/7/6 turns) so the comparison reads as "same work, different shape"
+     rather than two unrelated charts. .grouped raises the gap between
+     .task-group children above the base 4px so groups read as clusters;
+     .task-group itself is an ordinary flex row of .col, sized to 100% of
+     the (definite-height) .cols so the existing inline-percent .col heights
+     keep resolving exactly as before. None of this touches bare .cols/.col,
+     so demo 4's #h-curve (which never gets the .grouped class) is unaffected. */
+  .cols.grouped { gap:10px; }
+  .task-group { display:flex; align-items:flex-end; gap:4px; height:100%; }
+  .task-group + .task-group { border-left:1px solid var(--line); padding-left:6px; }
+  .task-row { display:flex; gap:10px; margin:10px 0 4px; }
+  .task-label { text-align:center; font-size:11px; color:var(--muted); padding-bottom:3px;
+    border-bottom:2px solid var(--line); letter-spacing:.02em; }
+  /* Matches .task-group's border-left(1px)+padding-left(6px) below, so each
+     label's box lines up with the column group it names. */
+  .task-row .task-label + .task-label { padding-left:7px; }
+  #b-play[disabled] { opacity:.6; cursor:default; }
   /* Motion is layered on top of the rules above, which already describe the
      correct at-rest appearance (full segment widths, full column heights,
      dimmed/struck evicted turns). Nothing in this block may be required for
@@ -585,29 +603,56 @@ function initWindow(root) {
 
   render();
 }
+// Translator-facing strings for demo 3's task grouping and play control,
+// kept together in one place (rather than scattered across the template
+// literal below) so a Thai pass can find and replace them without hunting
+// through markup or animation logic.
+const BURN_LABELS = {
+  taskGroups: ['Task 1', 'Task 2', 'Task 3'],
+  playIdle: '▶ Play turn by turn',
+  playRunning: 'Playing…',
+  playDone: '↺ Replay'
+};
+
 function initBurn(root) {
   const TURNS = 20;
+  const CHAT_LENGTH = 7;
   const turns = Array.from({ length: TURNS }, () => ({ in: 220, out: 520 }));
   const baseTokens = CONFIG.systemPromptTokens;
 
   const long = burnSeries({ baseTokens, turns });
-  const split = splitChats({ baseTokens, turns, chatLength: 7 });
+  const split = splitChats({ baseTokens, turns, chatLength: CHAT_LENGTH });
+
+  // Same boundaries splitChats itself chunks on (after turn 7, after turn
+  // 14) — computed once here so both charts group identically and the
+  // grouping can never drift out of sync with the actual chunking above.
+  const groupSizes = [];
+  for (let start = 0; start < TURNS; start += CHAT_LENGTH) {
+    groupSizes.push(Math.min(CHAT_LENGTH, TURNS - start));
+  }
 
   const dollars = (tokens) => (tokens / 1e6 * CONFIG.apiRates.inputPerMTok).toFixed(2);
+  const longTotalStr = long.at(-1).cumulative.toLocaleString();
+  const splitTotalStr = split.at(-1).cumulative.toLocaleString();
 
   root.innerHTML = `
     <p>Every time you hit send, the model re-reads the whole conversation. Turn 20 is not the same
-    size as turn 1 — it carries all nineteen turns before it.</p>
+    size as turn 1 — it carries all nineteen turns before it. Same three tasks, twenty turns either way.</p>
+    <div class="presets" id="b-controls">
+      <button type="button" id="b-play">${BURN_LABELS.playIdle}</button>
+    </div>
     <div class="split2">
       <div>
         <h3>One long chat</h3>
-        <div class="cols" id="b-long"></div>
-        <p class="muted">Total processed: <b>${long.at(-1).cumulative.toLocaleString()}</b> tokens</p>
+        <div class="task-row" id="b-long-tasks"></div>
+        <div class="cols grouped" id="b-long"></div>
+        <p class="muted">Total processed: <b id="b-long-total">${longTotalStr}</b> tokens</p>
       </div>
       <div>
         <h3>Same work, a fresh chat every 7 turns</h3>
-        <div class="cols" id="b-split"></div>
-        <p class="muted">Total processed: <b>${split.at(-1).cumulative.toLocaleString()}</b> tokens</p>
+        <div class="task-row" id="b-split-tasks"></div>
+        <div class="cols grouped" id="b-split"></div>
+        <p class="muted">Total processed: <b id="b-split-total">${splitTotalStr}</b> tokens</p>
       </div>
     </div>
     <p>That is <b>${(long.at(-1).cumulative / split.at(-1).cumulative).toFixed(1)}×</b> more work for
@@ -619,22 +664,115 @@ function initBurn(root) {
     </details>
     <p class="takeaway">Start a new chat when the topic changes.</p>`;
 
+  const buildTaskRow = (id) => {
+    const row = root.querySelector(id);
+    groupSizes.forEach((size, i) => {
+      const label = document.createElement('div');
+      label.className = 'task-label';
+      label.style.flex = String(size);
+      label.textContent = BURN_LABELS.taskGroups[i];
+      row.append(label);
+    });
+  };
+  buildTaskRow('#b-long-tasks');
+  buildTaskRow('#b-split-tasks');
+
   const peak = long.at(-1).processed;
+  // Builds the grouped chart and returns its columns as a flat array, in
+  // turn order — draw() itself never changes a column's final height/class
+  // from what shipped before; grouping only changes how the .col elements
+  // are nested (into .task-group wrappers) for layout, and armGrowIn is
+  // handed that same flat array exactly as it always was.
   const draw = (id, series, cls) => {
     const box = root.querySelector(id);
     const cols = [];
-    for (const point of series) {
-      const col = document.createElement('div');
-      col.className = `col ${cls}`;
-      col.style.height = `${(point.processed / peak) * 100}%`;
-      col.title = `${point.processed.toLocaleString()} tokens processed this turn`;
-      box.append(col);
-      cols.push(col);
+    let idx = 0;
+    for (const size of groupSizes) {
+      const group = document.createElement('div');
+      group.className = 'task-group';
+      group.style.flex = String(size);
+      for (let k = 0; k < size; k++) {
+        const point = series[idx++];
+        const col = document.createElement('div');
+        col.className = `col ${cls}`;
+        col.style.height = `${(point.processed / peak) * 100}%`;
+        col.title = `${point.processed.toLocaleString()} tokens processed this turn`;
+        group.append(col);
+        cols.push(col);
+      }
+      box.append(group);
     }
     armGrowIn(box, cols);
+    return cols;
   };
-  draw('#b-long', long, '');
-  draw('#b-split', split, 'alt');
+  const longCols = draw('#b-long', long, '');
+  const splitCols = draw('#b-split', split, 'alt');
+
+  // Play control: both charts are fully drawn at rest (armGrowIn's own
+  // reveal already handles that on scroll-in) — an attendee who never
+  // touches Play still sees the true, complete comparison, and totals
+  // already read 169,000 / 70,580. Play re-plays that same true state as a
+  // turn-by-turn story: it hides every column, then reveals turn 1 on both
+  // sides, then turn 2, and so on, so the growing gap between the two
+  // totals builds in front of you instead of arriving pre-drawn.
+  //
+  // Reuses armGrowIn's own .grow/.in pair rather than inventing a second
+  // set of motion classes: .grow (already permanently on every column) is
+  // "hidden", .grow.in is "shown", exactly as it is for the entrance
+  // reveal, so there is nothing new for that reveal-on-scroll to fight
+  // with — removing .in re-hides a column, re-adding it reveals it, and if
+  // armGrowIn's own fallback/observer later (re-)adds .in that is a no-op.
+  // The per-column transitionDelay armGrowIn set for its ~20ms entrance
+  // micro-stagger is zeroed before a play run so pacing is driven only by
+  // this function's own per-turn timer, not doubled up with that stagger.
+  const playBtn = root.querySelector('#b-play');
+  const longTotalEl = root.querySelector('#b-long-total');
+  const splitTotalEl = root.querySelector('#b-split-total');
+  const STEP_MS = 160; // ~3.2s for all 20 turns — within the 120-200ms/turn, 3-4s total target
+
+  let runToken = 0; // invalidates a stale timer chain if play is pressed again mid-run
+  const setState = (state) => {
+    playBtn.disabled = state === 'playing';
+    playBtn.textContent = state === 'playing' ? BURN_LABELS.playRunning
+      : state === 'done' ? BURN_LABELS.playDone
+      : BURN_LABELS.playIdle;
+  };
+  const showFinal = () => {
+    for (const col of longCols) col.classList.add('in');
+    for (const col of splitCols) col.classList.add('in');
+    longTotalEl.textContent = longTotalStr;
+    splitTotalEl.textContent = splitTotalStr;
+  };
+
+  playBtn.addEventListener('click', () => {
+    const myRun = ++runToken;
+    if (REDUCE_MOTION) {
+      // Jump straight to the final state — no per-turn reveal, no counting
+      // animation on the totals either.
+      showFinal();
+      setState('done');
+      return;
+    }
+    setState('playing');
+    for (const col of [...longCols, ...splitCols]) {
+      col.style.transitionDelay = '0ms';
+      col.classList.remove('in');
+    }
+    longTotalEl.textContent = '0';
+    splitTotalEl.textContent = '0';
+    let i = 0;
+    const step = () => {
+      if (myRun !== runToken) return; // superseded by a newer press
+      longCols[i].classList.add('in');
+      splitCols[i].classList.add('in');
+      longTotalEl.textContent = long[i].cumulative.toLocaleString();
+      splitTotalEl.textContent = split[i].cumulative.toLocaleString();
+      i++;
+      if (i < TURNS) setTimeout(step, STEP_MS);
+      else setState('done');
+    };
+    step();
+  });
 }
 const LITERATURE_CURVE = {
   source: 'Liu et al., "Lost in the Middle: How Language Models Use Long Contexts" (2023)',
