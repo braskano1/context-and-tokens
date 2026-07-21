@@ -458,6 +458,61 @@ const LITERATURE_CURVE = {
   ]
 };
 
+const LIVE_NEEDLE = 'The access code for the Rotterdam warehouse is PELICAN-4471.';
+const LIVE_QUESTION = 'What is the access code for the Rotterdam warehouse? Answer with the code only.';
+const LIVE_FILLER = ('Quarterly logistics review. Freight volumes held steady across the northern ' +
+  'corridor, with modest gains in refrigerated capacity and no material change to insurance exposure. ').repeat(600);
+
+function appendLivePanel(root) {
+  const wrap = document.createElement('details');
+  wrap.innerHTML = `
+    <summary>Advanced: re-run this live with your own API key</summary>
+    <p class="muted"><b>Only do this on your own machine.</b> The key stays in this tab's memory,
+    is never saved and never leaves your browser except in the request to Anthropic. Reloading the
+    page clears it. Do not paste a shared or production key on a workshop laptop.</p>
+    <input id="h-key" type="password" placeholder="sk-ant-..." autocomplete="off"
+           style="width:100%;padding:10px;background:var(--pane);color:var(--fg);border:1px solid var(--line);border-radius:8px">
+    <div class="presets"><button id="h-run">run all three depths</button></div>
+    <div id="h-live" class="muted" style="white-space:pre-wrap"></div>`;
+  root.append(wrap);
+
+  const out = wrap.querySelector('#h-live');
+  wrap.querySelector('#h-run').onclick = async () => {
+    const key = wrap.querySelector('#h-key').value.trim();
+    if (!key) { out.textContent = 'Paste a key first.'; return; }
+    out.textContent = 'Running…';
+    const lines = [];
+    for (const depth of [0.1, 0.5, 0.9]) {
+      const doc = LIVE_FILLER.slice(0, Math.floor(LIVE_FILLER.length * depth)) +
+        `\n\n${LIVE_NEEDLE}\n\n` + LIVE_FILLER.slice(Math.floor(LIVE_FILLER.length * depth));
+      try {
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-api-key': key,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true'
+          },
+          body: JSON.stringify({
+            model: 'claude-opus-4-8',
+            max_tokens: 100,
+            messages: [{ role: 'user', content: `${doc}\n\n${LIVE_QUESTION}` }]
+          })
+        });
+        const json = await res.json();
+        const answer = res.ok
+          ? json.content.map(b => b.text || '').join('').trim()
+          : `error ${res.status}: ${json.error?.message || 'request failed'}`;
+        lines.push(`${Math.round(depth * 100)}% in → ${answer}`);
+      } catch (err) {
+        lines.push(`${Math.round(depth * 100)}% in → request failed: ${err.message}`);
+      }
+      out.textContent = lines.join('\n');
+    }
+  };
+}
+
 function haystackPosLabel(depth) {
   if (depth === 0) return 'Start';
   if (depth === 1) return 'End';
@@ -492,6 +547,7 @@ function initHaystack(root) {
       col.title = `${Math.round(p.depth * 100)}% through the document: ${Math.round(p.accuracy * 100)}% recall (approximate)`;
       box.append(col);
     }
+    appendLivePanel(root);
     return;
   }
 
@@ -516,6 +572,7 @@ function initHaystack(root) {
     };
     root.querySelector('#h-buttons').append(b);
   }
+  appendLivePanel(root);
 }
 function runSelfTest() { /* todo */ }
 
