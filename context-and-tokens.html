@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Context &amp; Tokens</title>
+<style>
+  :root { --bg:#0f1115; --fg:#e8e8ea; --muted:#9aa0aa; --accent:#7aa2f7; --warn:#e0af68; --pane:#171a21; --line:#2a2f3a; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.6 system-ui, sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 24px 20px 120px; }
+  h1 { font-size: clamp(28px, 5vw, 44px); line-height:1.15; margin:.6em 0 .2em; }
+  h2 { font-size: clamp(22px, 3.5vw, 32px); margin-top: 2.4em; }
+  section { border-top:1px solid var(--line); padding-top: 8px; }
+  .muted { color: var(--muted); }
+  #status { padding:10px 14px; background:var(--pane); border:1px solid var(--line); border-radius:8px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Context &amp; Tokens</h1>
+  <p class="muted">Four things to try. Scroll top to bottom.</p>
+  <div id="status">Loading the tokenizer…</div>
+
+  <section id="s1"><h2>1. What is a token?</h2><div class="mount"></div></section>
+  <section id="s2"><h2>2. The window</h2><div class="mount"></div></section>
+  <section id="s3"><h2>3. Why it slows down and eats your limit</h2><div class="mount"></div></section>
+  <section id="s4"><h2>4. Where it breaks</h2><div class="mount"></div></section>
+</main>
+
+<script>
+/* LOGIC:START */
+const VOCAB_B64 = ""; /* VOCAB:INJECTED */
+const TEST_VECTORS = []; /* VECTORS:INJECTED */
+const RECORDED_RUN = null; /* RUN:INJECTED */
+
+function sum(xs) { return xs.reduce((a, b) => a + b, 0); }
+/* LOGIC:END */
+
+document.getElementById('status').textContent = 'Skeleton loaded.';
+</script>
+</body>
+</html>

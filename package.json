@@ -1,0 +1,14 @@
+{
+  "name": "context-and-tokens",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test dev/tests/",
+    "build:vocab": "node dev/build-vocab.mjs",
+    "record:run": "node dev/record-run.mjs"
+  },
+  "devDependencies": {
+    "js-tiktoken": "^1.0.15",
+    "@anthropic-ai/sdk": "^0.32.1"
+  }
+}
