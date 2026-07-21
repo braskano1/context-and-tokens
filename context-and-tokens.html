@@ -90,12 +90,24 @@ function bpeMerge(ranks, bytes) {
   return parts.map(p => ({ id: ranks.get(bytesKey(p)), bytes: p }));
 }
 
+// bpeMerge is O(n^2) per chunk, so an unbroken pretoken (a pasted JWT, URL,
+// hash, or base64 blob) can freeze the tab; real prose never hits this
+// length, so slicing above it only affects pathological input, whose token
+// count becomes approximate rather than exact.
+const MAX_MERGE_CHUNK_BYTES = 512;
+
 function pieces(ranks, text) {
   const out = [];
   for (const match of text.matchAll(CL100K_PAT)) {
     const bytes = TEXT_ENCODER.encode(match[0]);
     const direct = ranks.get(bytesKey(bytes));
     if (direct !== undefined) { out.push({ id: direct, bytes: Array.from(bytes) }); continue; }
+    if (bytes.length > MAX_MERGE_CHUNK_BYTES) {
+      for (let i = 0; i < bytes.length; i += MAX_MERGE_CHUNK_BYTES) {
+        for (const piece of bpeMerge(ranks, bytes.subarray(i, i + MAX_MERGE_CHUNK_BYTES))) out.push(piece);
+      }
+      continue;
+    }
     for (const piece of bpeMerge(ranks, bytes)) out.push(piece);
   }
   return out;

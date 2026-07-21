@@ -30,3 +30,13 @@ test('heuristic fallback lands within 25% of the real count', async () => {
   const approx = logic.heuristicCount(text);
   assert.ok(Math.abs(approx - real) / real < 0.25, `real ${real}, approx ${approx}`);
 });
+
+test('a long unbroken chunk (no whitespace) encodes without hanging', async () => {
+  const ranks = await logic.loadRanks();
+  const text = 'a'.repeat(10000);
+  const start = Date.now();
+  const ids = logic.encode(ranks, text);
+  const elapsed = Date.now() - start;
+  assert.ok(ids.length > 0 && ids.length < 10000, `expected a plausible token count, got ${ids.length}`);
+  assert.ok(elapsed < 5000, `expected the merge cap to keep this fast, took ${elapsed}ms`);
+});
