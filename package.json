@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test \"dev/tests/**/*.test.mjs\"",
+    "serve": "node dev/serve.mjs",
     "build:vocab": "node dev/build-vocab.mjs",
     "record:run": "node dev/record-run.mjs"
   },
