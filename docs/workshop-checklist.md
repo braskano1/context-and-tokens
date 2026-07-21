@@ -10,12 +10,16 @@
 - [ ] Click through all four demos once yourself. In particular: click `+ 10 chat turns` four times
       in section 2 and confirm you see turns go struck-through. That eviction is the moment the
       whole page is built around.
+- [ ] If you have not opened the page since it was last edited, check it once in Chrome, Firefox,
+      and Safari, at projector width (1280 px) and at phone width. The layout is fluid and the
+      demos are plain DOM, so this rarely surprises — but it is cheap the day before and expensive
+      in the room.
 
 ## Known limitations, so nothing surprises you
 
 - Token counts come from `cl100k_base`, a published tokenizer. Claude's exact tokenizer is not
-  public. Counts are within a few percent and every effect shown is real for Claude too. If someone
-  asks, say that plainly — the page says it too.
+  public. Counts are within a few percent and every effect shown is real for Claude too. Section 1
+  says this on the page, so you can point at it rather than explaining from memory.
 - Section 4 shows a published research curve, not a live model, because no recorded run was
   captured. It says so on screen. To replace it with real measured answers, see below.
 - Section 4's advanced panel can call the API live with a viewer's own key. It is collapsed by
