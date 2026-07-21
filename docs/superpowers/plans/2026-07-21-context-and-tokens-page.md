@@ -46,7 +46,7 @@ Everything the attendee needs is `context-and-tokens.html` alone. `dev/` exists 
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test dev/tests/",
+    "test": "node --test \"dev/tests/**/*.test.mjs\"",
     "build:vocab": "node dev/build-vocab.mjs",
     "record:run": "node dev/record-run.mjs"
   },
