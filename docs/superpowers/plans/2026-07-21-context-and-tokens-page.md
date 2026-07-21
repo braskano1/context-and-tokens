@@ -242,7 +242,7 @@ console.log(`vocab: ${(b64.length / 1e6).toFixed(2)} MB base64, ${vectors.length
 - [ ] **Step 2: Run it**
 
 Run: `npm run build:vocab`
-Expected: `vocab: ~1.5 MB base64, 10 test vectors`.
+Expected: `vocab: 1.03 MB base64, 10 test vectors`.
 
 - [ ] **Step 3: Verify the page still parses**
 
@@ -252,7 +252,7 @@ Expected: PASS (harness test still green — it only reads `sum`).
 - [ ] **Step 4: Sanity-check the injected size**
 
 Run: `node -e "console.log((require('fs').statSync('context-and-tokens.html').size/1e6).toFixed(2)+' MB')"`
-Expected: roughly `1.5` to `1.7` MB. If it is under 0.1 MB, injection silently failed — re-check the regexes.
+Expected: about `1.03` MB. If it is under 0.1 MB, injection silently failed — re-check the regexes.
 
 - [ ] **Step 5: Commit**
 

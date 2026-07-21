@@ -21,7 +21,7 @@ down, why it burns their usage limit faster, and what to do about it.
 One file: `context-and-tokens.html`. Hosted by the presenter (GitHub Pages, intranet, or opened
 from disk). No build step, no server. The page makes no network
 calls at all unless a user opts into the advanced live panel in demo 4, so it works offline and
-over `file://`. Roughly 1.5 MB because the tokenizer vocabulary is embedded.
+over `file://`. Roughly 1.0 MB because the tokenizer vocabulary is embedded.
 
 ## Architecture
 
@@ -34,7 +34,7 @@ over `file://`. Roughly 1.5 MB because the tokenizer vocabulary is embedded.
   `initHaystack(root)`. They share exactly one dependency: `tokenize(text) -> number[]`.
   Replacing the tokenizer touches nothing else.
 - Tokenizer: real BPE (`cl100k_base` — chosen over `o200k_base` because its ranks file inlines to
-  about 1.5 MB instead of 3 MB, with the same teaching value), vocabulary embedded as base64 + gzip and decoded once at
+  about 1.0 MB instead of 3 MB, with the same teaching value), vocabulary embedded as base64 + gzip and decoded once at
   load via `DecompressionStream`. Brief loading state, then every demo is live.
 - No CDN scripts, no web fonts, no analytics.
 
