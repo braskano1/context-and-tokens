@@ -60,6 +60,21 @@
        display:none, so no JS retrigger logic is needed. */
     .notice-fade { animation: notice-fade-in .2s ease; }
     @keyframes notice-fade-in { from { opacity: 0; } to { opacity: 1; } }
+    /* .reveal is only ever applied by JS after confirming IntersectionObserver
+       exists and the user hasn't asked for reduced motion, exactly like
+       .grow above (see armSlideReveal()). Default (no .reveal) is fully
+       visible, so a JS failure never leaves a slide blank. .in is added the
+       first time a slide intersects and then that slide is unobserved, so
+       the entrance never replays on scroll-back; a fallback timer still adds
+       .in to everything left over so nothing can get stuck hidden.
+       This lives on the inner wrapper, not .slide itself: .slide is also the
+       scroll-snap target, and a transform on the snap target shifts the
+       browser's snap-position math (measured post-transform), which left the
+       whole deck permanently offset by the animation's own 12px on load. The
+       wrapper keeps the animation purely visual and the snap target inert. */
+    .slide-inner.reveal { opacity: 0; transform: translateY(12px); }
+    .slide-inner.reveal.in { opacity: 1; transform: translateY(0); transition: opacity .25s ease, transform .25s ease; }
+    #more-hint.show { animation: notice-fade-in .2s ease; }
   }
   .col.alt { background:#7a9c7a; }
   .col.mid { background:var(--warn); }
@@ -74,27 +89,49 @@
   #dots a { display:block; width:10px; height:10px; border-radius:50%; background:var(--line); }
   #dots a.on { background:var(--accent); }
   @media (max-width:760px) { #dots { display:none; } }
+  #more-hint { position:fixed; left:50%; bottom:54px; transform:translateX(-50%); display:none; align-items:center; gap:6px; background:var(--pane); border:1px solid var(--line); border-radius:999px; padding:5px 12px; font-size:12px; color:var(--muted); pointer-events:none; z-index:8; }
+  #more-hint.show { display:flex; }
+  /* Snap deck: only kicks in when a slide can actually be a full screen
+     (matches the #dots breakpoint above). Below this size the page is
+     ordinary continuous scroll — no fixed heights, no inner scrollbars,
+     and this block simply does not apply; no JS branch needed. */
+  @media (min-width: 761px) and (min-height: 701px) {
+    html { scroll-snap-type: y mandatory; }
+    main { padding-top: 0; padding-bottom: 0; }
+    .slide {
+      height: 100dvh;
+      overflow-y: auto;
+      overflow-x: hidden;
+      box-sizing: border-box;
+      scroll-snap-align: start;
+      scroll-snap-stop: always;
+      padding-top: 56px;
+      padding-bottom: 48px;
+    }
+  }
 </style>
 </head>
 <body>
 <main>
-  <h1>Context &amp; Tokens</h1>
-  <p class="muted">Four things to try. Scroll top to bottom.</p>
-  <div id="status">Loading the tokenizer…</div>
+  <div class="slide title-slide"><div class="slide-inner">
+    <h1>Context &amp; Tokens</h1>
+    <p class="muted">Four things to try. Scroll top to bottom.</p>
+    <div id="status">Loading the tokenizer…</div>
+  </div></div>
 
-  <section id="s1"><h2>1. What is a token?</h2><div class="mount"></div></section>
-  <section id="s2"><h2>2. The window</h2><div class="mount"></div></section>
-  <section id="s3"><h2>3. Why it slows down and eats your limit</h2><div class="mount"></div></section>
-  <section id="s4"><h2>4. Where it breaks</h2><div class="mount"></div></section>
+  <section id="s1" class="slide"><div class="slide-inner"><h2>1. What is a token?</h2><div class="mount"></div></div></section>
+  <section id="s2" class="slide"><div class="slide-inner"><h2>2. The window</h2><div class="mount"></div></div></section>
+  <section id="s3" class="slide"><div class="slide-inner"><h2>3. Why it slows down and eats your limit</h2><div class="mount"></div></div></section>
+  <section id="s4" class="slide"><div class="slide-inner"><h2>4. Where it breaks</h2><div class="mount"></div></div></section>
 
-  <section id="s5"><h2>Four rules of thumb</h2>
+  <section id="s5" class="slide"><div class="slide-inner"><h2>Four rules of thumb</h2>
     <ol>
       <li><b>New chat per topic.</b> Old turns are dead weight the model re-reads every time.</li>
       <li><b>Put the question first.</b> Buried questions get worse answers.</li>
       <li><b>Attach it once, where it's needed.</b> A document you attach sits in the window and gets re-read on every turn after it.</li>
       <li><b>Shorter beats longer.</b> A tight prompt is faster, cheaper, and more accurate.</li>
     </ol>
-  </section>
+  </div></section>
 </main>
 
 <script>
@@ -764,6 +801,85 @@ if (typeof IntersectionObserver === 'function') {
   }, { rootMargin: '-40% 0px -40% 0px' });
   sections.forEach(s => spy.observe(s));
 }
+
+// Once-only slide entrance. Same defend-in-depth shape as armGrowIn above:
+// only arms itself once IntersectionObserver exists and reduced motion
+// isn't requested (otherwise slides simply keep their default, fully
+// visible state); each slide is unobserved right after it gets .in, so
+// scrolling back up never replays the animation; a single fallback timer
+// mirrors armGrowIn's own 2s fallback so a slide can never end up stuck
+// invisible even if the observer never fires for it (e.g. a still-hidden
+// tab at load) — at the cost, same as armGrowIn, of that slide appearing
+// instantly rather than animating in if it's reached after the fallback.
+// Runs at top-level scope because the slides are static markup already in
+// the DOM; it does not need to wait for boot().
+//
+// The observer watches .slide (the scroll-snap target) but animates its
+// .slide-inner child instead — see the CSS comment on .slide-inner.reveal
+// for why the animated element can't be the snap target itself.
+function armSlideReveal() {
+  if (REDUCE_MOTION || typeof IntersectionObserver !== 'function') return;
+  const slides = [...document.querySelectorAll('.slide')];
+  if (!slides.length) return;
+  const innerOf = s => s.querySelector('.slide-inner');
+  slides.forEach(s => innerOf(s)?.classList.add('reveal'));
+  const obs = new IntersectionObserver(entries => {
+    for (const e of entries) {
+      if (e.isIntersecting) {
+        innerOf(e.target)?.classList.add('in');
+        obs.unobserve(e.target);
+      }
+    }
+  }, { threshold: 0.15 });
+  slides.forEach(s => obs.observe(s));
+  setTimeout(() => {
+    slides.forEach(s => innerOf(s)?.classList.add('in'));
+    obs.disconnect();
+  }, 2000);
+}
+armSlideReveal();
+
+// Bottom-pinned "more below" hint for whichever slide is currently on
+// screen, shown only while that slide's own content is taller than it (i.e.
+// scrolling internally) and hasn't been scrolled to its own bottom yet.
+// Below the snap breakpoint .slide has no fixed height or overflow, so
+// scrollHeight === clientHeight there and this never shows — the same
+// screen-size boundary as the CSS, with no separate JS branch. Purely
+// additive: if IntersectionObserver or MutationObserver is unavailable this
+// silently never shows, it can never hide real content.
+function initOverflowHint() {
+  const hint = document.createElement('div');
+  hint.id = 'more-hint';
+  hint.textContent = 'more below ↓';
+  document.body.append(hint);
+
+  let current = null;
+  function refresh() {
+    if (!current) { hint.classList.remove('show'); return; }
+    const overflowing = current.scrollHeight > current.clientHeight + 2;
+    const atBottom = current.scrollTop + current.clientHeight >= current.scrollHeight - 2;
+    hint.classList.toggle('show', overflowing && !atBottom);
+  }
+
+  if (typeof IntersectionObserver === 'function') {
+    const slides = [...document.querySelectorAll('.slide')];
+    const obs = new IntersectionObserver(entries => {
+      for (const e of entries) {
+        if (e.isIntersecting) { current = e.target; refresh(); }
+      }
+    }, { threshold: 0.6 });
+    slides.forEach(s => {
+      obs.observe(s);
+      s.addEventListener('scroll', () => { if (current === s) refresh(); }, { passive: true });
+    });
+  }
+  window.addEventListener('resize', refresh);
+  const main = document.querySelector('main');
+  if (typeof MutationObserver === 'function' && main) {
+    new MutationObserver(refresh).observe(main, { childList: true, subtree: true, characterData: true });
+  }
+}
+initOverflowHint();
 
 async function boot() {
   try {

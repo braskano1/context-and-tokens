@@ -25,8 +25,14 @@ over `file://`. Roughly 1.0 MB because the tokenizer vocabulary is embedded.
 
 ## Architecture
 
-- Structure: `<header>` + four `<section>` demos + takeaway strip + footer. Single vertical
-  scroll — the reading order is the argument. Scroll-spy progress dots for orientation.
+- Structure: a title slide + four `<section>` demos + takeaway strip. Single vertical scroll — the
+  reading order is the argument. Scroll-spy progress dots for orientation.
+- On screens at least 761 px wide and 701 px tall, the page reads as a deck: each slide occupies
+  exactly one viewport height and scrolling snaps between them, so two demos are never visible at
+  once. A slide whose content outgrows the screen scrolls inside itself. Below that threshold the
+  media query does not apply and the page is an ordinary continuous scroll — no toggle, no JS
+  branch. Each slide fades and rises once when first reached; the at-rest state is fully visible,
+  so a failed observer or reduced-motion preference leaves the content plainly readable.
 - A `CONFIG` object at the top of the inline `<script>` holds every value that can go stale:
   model names, context window size, price aside, quota assumptions, and the recorded-run data.
   Each entry carries the date it was captured. Editing the page's numbers means editing one block.
