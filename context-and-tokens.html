@@ -397,7 +397,7 @@ function initWindow(root) {
 function initBurn(root) {
   const TURNS = 20;
   const turns = Array.from({ length: TURNS }, () => ({ in: 220, out: 520 }));
-  const baseTokens = CONFIG.systemPromptTokens + CONFIG.attachments[0].tokens;
+  const baseTokens = CONFIG.systemPromptTokens;
 
   const long = burnSeries({ baseTokens, turns });
   const split = splitChats({ baseTokens, turns, chatLength: 7 });
@@ -426,8 +426,7 @@ function initBurn(root) {
       <p class="muted">Long chat ≈ $${dollars(long.at(-1).cumulative)} versus
       $${dollars(split.at(-1).cumulative)} split. ${CONFIG.apiRates.note}.</p>
     </details>
-    <p class="takeaway">Start a new chat when the topic changes. Attach the document once, in the
-    chat that needs it.</p>`;
+    <p class="takeaway">Start a new chat when the topic changes.</p>`;
 
   const peak = long.at(-1).processed;
   const draw = (id, series, cls) => {
