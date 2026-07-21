@@ -35,6 +35,86 @@ const TEST_VECTORS = [{"text":"hello world","ids":[15339,1917]},{"text":"strawbe
 const RECORDED_RUN = null; /* RUN:INJECTED */
 
 function sum(xs) { return xs.reduce((a, b) => a + b, 0); }
+
+const CL100K_PAT = /'(?:[sSdDmMtT]|[lL][lL]|[vV][eE]|[rR][eE])|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+/gu;
+const TEXT_ENCODER = new TextEncoder();
+const TEXT_DECODER = new TextDecoder('utf-8', { fatal: false });
+
+function bytesKey(bytes) {
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return s;
+}
+
+function base64ToBytes(b64) {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function gunzipToText(bytes) {
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return await new Response(stream).text();
+}
+
+function buildRanks(text) {
+  const ranks = new Map();
+  for (const line of text.split('\n')) {
+    if (!line) continue;
+    const sp = line.indexOf(' ');
+    ranks.set(bytesKey(base64ToBytes(line.slice(0, sp))), Number(line.slice(sp + 1)));
+  }
+  return ranks;
+}
+
+let ranksPromise = null;
+function loadRanks() {
+  if (!ranksPromise) {
+    ranksPromise = gunzipToText(base64ToBytes(VOCAB_B64)).then(buildRanks);
+  }
+  return ranksPromise;
+}
+
+function bpeMerge(ranks, bytes) {
+  let parts = Array.from(bytes, b => [b]);
+  while (parts.length > 1) {
+    let bestRank = Infinity, bestIdx = -1;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const rank = ranks.get(bytesKey(parts[i].concat(parts[i + 1])));
+      if (rank !== undefined && rank < bestRank) { bestRank = rank; bestIdx = i; }
+    }
+    if (bestIdx === -1) break;
+    parts.splice(bestIdx, 2, parts[bestIdx].concat(parts[bestIdx + 1]));
+  }
+  return parts.map(p => ({ id: ranks.get(bytesKey(p)), bytes: p }));
+}
+
+function pieces(ranks, text) {
+  const out = [];
+  for (const match of text.matchAll(CL100K_PAT)) {
+    const bytes = TEXT_ENCODER.encode(match[0]);
+    const direct = ranks.get(bytesKey(bytes));
+    if (direct !== undefined) { out.push({ id: direct, bytes: Array.from(bytes) }); continue; }
+    for (const piece of bpeMerge(ranks, bytes)) out.push(piece);
+  }
+  return out;
+}
+
+function encode(ranks, text) {
+  return pieces(ranks, text).map(p => p.id);
+}
+
+function encodeDetailed(ranks, text) {
+  return pieces(ranks, text).map(p => ({
+    id: p.id,
+    text: TEXT_DECODER.decode(new Uint8Array(p.bytes))
+  }));
+}
+
+function heuristicCount(text) {
+  return Math.max(1, Math.round(text.length / 3.8));
+}
 /* LOGIC:END */
 
 document.getElementById('status').textContent = 'Skeleton loaded.';

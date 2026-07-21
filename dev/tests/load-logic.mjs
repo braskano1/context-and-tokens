@@ -9,7 +9,8 @@ export function loadLogic() {
   let factory;
   try {
     factory = new Function(`${match[1]}
-    return { VOCAB_B64, TEST_VECTORS, RECORDED_RUN, sum };`);
+    return { VOCAB_B64, TEST_VECTORS, RECORDED_RUN, sum,
+      loadRanks, encode, encodeDetailed, heuristicCount, buildRanks, bpeMerge };`);
   } catch (err) {
     throw new Error('LOGIC block in context-and-tokens.html has a syntax error', { cause: err });
   }
