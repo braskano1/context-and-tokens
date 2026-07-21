@@ -14,6 +14,17 @@
   section { border-top:1px solid var(--line); padding-top: 8px; }
   .muted { color: var(--muted); }
   #status { padding:10px 14px; background:var(--pane); border:1px solid var(--line); border-radius:8px; }
+  textarea { width:100%; min-height:120px; background:var(--pane); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:12px; font:inherit; }
+  .chips { display:flex; flex-wrap:wrap; gap:2px; margin:12px 0; }
+  .chip { padding:2px 4px; border-radius:4px; font:14px/1.4 ui-monospace, monospace; white-space:pre-wrap; }
+  .chip:nth-child(odd) { background:#2b3550; }
+  .chip:nth-child(even) { background:#38304a; }
+  .stats { display:flex; gap:20px; flex-wrap:wrap; font-variant-numeric:tabular-nums; }
+  .stats b { font-size:22px; }
+  .presets { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
+  button { background:var(--pane); color:var(--fg); border:1px solid var(--line); border-radius:999px; padding:6px 12px; font:inherit; cursor:pointer; }
+  button:hover { border-color:var(--accent); }
+  .takeaway { border-left:3px solid var(--accent); padding-left:12px; margin:16px 0; }
 </style>
 </head>
 <body>
@@ -148,7 +159,61 @@ let RANKS = null;
 let APPROXIMATE = false;
 let countTokens = () => 0;
 
-function initTokenizer(root) { root.textContent = 'todo'; }
+const PRESETS = [
+  { label: 'strawberry', text: 'How many r\'s are in "strawberry"?' },
+  { label: 'emoji', text: 'Ship it 🍓🚀 — emoji are expensive 🎉' },
+  { label: 'numbers', text: 'Invoice 1234567890 for 42 units at 19.99' },
+  { label: 'same idea, Arabic', text: 'This sentence costs far less in English.\nهذه الجملة نفسها تكلف ضعف عدد الرموز تقريبًا.' },
+  { label: 'code', text: 'function add(a, b) {\n  return a + b;\n}\n' },
+  { label: 'whitespace', text: 'lots     of      spaces\n\n\nand blank lines' }
+];
+
+function initTokenizer(root) {
+  root.innerHTML = `
+    <p>Type anything. The model never sees your letters — it sees these chunks.</p>
+    <div class="presets"></div>
+    <textarea id="tk-input">Tokens are the unit models actually read.</textarea>
+    <div class="stats">
+      <div><b id="tk-tokens">0</b><br><span class="muted">tokens</span></div>
+      <div><b id="tk-chars">0</b><br><span class="muted">characters</span></div>
+      <div><b id="tk-ratio">0</b><br><span class="muted">characters per token</span></div>
+    </div>
+    <div class="chips" id="tk-chips"></div>
+    <p class="takeaway">This is why it miscounts letters in a word, and why the same sentence in
+    another language can cost three times as much of your context.</p>`;
+
+  const input = root.querySelector('#tk-input');
+  const chips = root.querySelector('#tk-chips');
+
+  const presetBar = root.querySelector('.presets');
+  for (const preset of PRESETS) {
+    const b = document.createElement('button');
+    b.textContent = preset.label;
+    b.onclick = () => { input.value = preset.text; render(); };
+    presetBar.append(b);
+  }
+
+  function render() {
+    const text = input.value.slice(0, 20000);
+    const count = countTokens(text);
+    root.querySelector('#tk-tokens').textContent = count.toLocaleString();
+    root.querySelector('#tk-chars').textContent = text.length.toLocaleString();
+    root.querySelector('#tk-ratio').textContent = count ? (text.length / count).toFixed(1) : '0';
+    chips.textContent = '';
+    if (APPROXIMATE) { chips.innerHTML = '<span class="muted">Chunk view needs the tokenizer, which did not load.</span>'; return; }
+    for (const tok of encodeDetailed(RANKS, text).slice(0, 1200)) {
+      const el = document.createElement('span');
+      el.className = 'chip';
+      el.textContent = tok.text.replace(/\n/g, '\\n');
+      el.title = `id ${tok.id}`;
+      chips.append(el);
+    }
+  }
+
+  let timer;
+  input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(render, 120); });
+  render();
+}
 function initWindow(root) { root.textContent = 'todo'; }
 function initBurn(root) { root.textContent = 'todo'; }
 function initHaystack(root) { root.textContent = 'todo'; }
