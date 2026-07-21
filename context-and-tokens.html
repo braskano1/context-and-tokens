@@ -35,6 +35,11 @@
   .cols { display:flex; align-items:flex-end; gap:4px; height:160px; margin:12px 0; }
   .col { flex:1; background:var(--accent); border-radius:3px 3px 0 0; min-height:2px; }
   .col.alt { background:#7a9c7a; }
+  .col.mid { background:var(--warn); }
+  .h-vals, .h-pos { display:flex; gap:4px; text-align:center; }
+  .h-vals div, .h-pos div { flex:1; font-size:13px; }
+  .h-vals div { font-weight:600; }
+  .h-pos div { color:var(--muted); font-size:12px; }
   .split2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
   @media (max-width:640px) { .split2 { grid-template-columns:1fr; } }
   details { margin:12px 0; }
@@ -442,7 +447,76 @@ function initBurn(root) {
   draw('#b-long', long, '');
   draw('#b-split', split, 'alt');
 }
-function initHaystack(root) { root.textContent = 'todo'; }
+const LITERATURE_CURVE = {
+  source: 'Liu et al., "Lost in the Middle: How Language Models Use Long Contexts" (2023)',
+  points: [
+    { depth: 0.0, accuracy: 0.75 },
+    { depth: 0.25, accuracy: 0.56 },
+    { depth: 0.5, accuracy: 0.52 },
+    { depth: 0.75, accuracy: 0.58 },
+    { depth: 1.0, accuracy: 0.72 }
+  ]
+};
+
+function haystackPosLabel(depth) {
+  if (depth === 0) return 'Start';
+  if (depth === 1) return 'End';
+  if (depth === 0.5) return 'Middle';
+  return `${Math.round(depth * 100)}%`;
+}
+
+function initHaystack(root) {
+  if (!RECORDED_RUN) {
+    const first = LITERATURE_CURVE.points[0];
+    const worst = LITERATURE_CURVE.points.reduce((a, b) => (b.accuracy < a.accuracy ? b : a));
+    const last = LITERATURE_CURVE.points.at(-1);
+    root.innerHTML = `
+      <p>Where a fact sits inside a long document changes how reliably the model finds it. Facts near
+      the start or the end are recalled well; facts buried in the middle are recalled worst — even
+      though the model reads every word either way.</p>
+      <div class="h-vals">${LITERATURE_CURVE.points.map(p => `<div>${Math.round(p.accuracy * 100)}%</div>`).join('')}</div>
+      <div class="cols" id="h-curve"></div>
+      <div class="h-pos">${LITERATURE_CURVE.points.map(p => `<div>${haystackPosLabel(p.depth)}</div>`).join('')}</div>
+      <p class="muted">Approximate — read off a published chart, not exact figures. Recall fell from
+      ${Math.round(first.accuracy * 100)}% near the start to ${Math.round(worst.accuracy * 100)}% in the
+      middle, then recovered to ${Math.round(last.accuracy * 100)}% at the end.
+      Source: ${LITERATURE_CURVE.source}. No live model was called.</p>
+      <p class="takeaway">Put your actual question first, and keep the material short enough that
+      the answer is not buried.</p>`;
+    const box = root.querySelector('#h-curve');
+    for (const p of LITERATURE_CURVE.points) {
+      const isMiddle = p.depth > 0 && p.depth < 1;
+      const col = document.createElement('div');
+      col.className = 'col' + (isMiddle ? ' mid' : '');
+      col.style.height = `${p.accuracy * 100}%`;
+      col.title = `${Math.round(p.depth * 100)}% through the document: ${Math.round(p.accuracy * 100)}% recall (approximate)`;
+      box.append(col);
+    }
+    return;
+  }
+
+  root.innerHTML = `
+    <p>One fact was hidden inside a long report, at three different depths, and the same question was
+    asked each time.</p>
+    <p class="muted">Recorded run · ${RECORDED_RUN.model} · ${RECORDED_RUN.capturedAt} ·
+    ${RECORDED_RUN.results[0].inputTokens.toLocaleString()} input tokens per run. Not live.</p>
+    <div class="presets" id="h-buttons"></div>
+    <p><b>Question:</b> ${RECORDED_RUN.question}</p>
+    <div id="h-answer" class="muted">Pick a position above.</div>
+    <p class="takeaway">Put your actual question first, and keep the material short enough that the
+    answer is not buried.</p>`;
+
+  const answerEl = root.querySelector('#h-answer');
+  for (const r of RECORDED_RUN.results) {
+    const b = document.createElement('button');
+    b.textContent = `buried ${Math.round(r.depth * 100)}% in`;
+    b.onclick = () => {
+      answerEl.innerHTML = `<b>${r.correct ? '✓ found it' : '✗ missed it'}</b><br>
+        <span class="muted">Model answered:</span> ${r.answer.replace(/</g, '&lt;')}`;
+    };
+    root.querySelector('#h-buttons').append(b);
+  }
+}
 function runSelfTest() { /* todo */ }
 
 async function boot() {
