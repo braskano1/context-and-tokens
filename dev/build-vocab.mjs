@@ -28,14 +28,25 @@ const b64 = gzipSync(Buffer.from(ranksText, 'utf8')).toString('base64');
 const enc = new Tiktoken(cl100k);
 const vectors = SAMPLES.map(text => ({ text, ids: enc.encode(text) }));
 
+function replaceOrThrow(html, pattern, replacement, markerName) {
+  if (!pattern.test(html)) {
+    throw new Error(`injection failed: marker ${markerName} not found in context-and-tokens.html`);
+  }
+  return html.replace(pattern, replacement);
+}
+
 let html = readFileSync(HTML_PATH, 'utf8');
-html = html.replace(
+html = replaceOrThrow(
+  html,
   /const VOCAB_B64 = [\s\S]*?\/\* VOCAB:INJECTED \*\//,
-  `const VOCAB_B64 = "${b64}"; /* VOCAB:INJECTED */`
+  `const VOCAB_B64 = "${b64}"; /* VOCAB:INJECTED */`,
+  'VOCAB:INJECTED'
 );
-html = html.replace(
+html = replaceOrThrow(
+  html,
   /const TEST_VECTORS = [\s\S]*?\/\* VECTORS:INJECTED \*\//,
-  `const TEST_VECTORS = ${JSON.stringify(vectors)}; /* VECTORS:INJECTED */`
+  `const TEST_VECTORS = ${JSON.stringify(vectors)}; /* VECTORS:INJECTED */`,
+  'VECTORS:INJECTED'
 );
 writeFileSync(HTML_PATH, html);
 
