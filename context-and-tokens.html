@@ -1,16 +1,16 @@
 <!doctype html>
-<html lang="en">
+<html lang="th">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Context &amp; Tokens</title>
+<title>บริบทกับโทเค็น</title>
 <style>
   :root { --bg:#0f1115; --fg:#e8e8ea; --muted:#9aa0aa; --accent:#7aa2f7; --warn:#e0af68; --pane:#171a21; --line:#2a2f3a; }
   * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.6 system-ui, sans-serif; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.75 system-ui, "Segoe UI", "Leelawadee UI", "Thonburi", "Noto Sans Thai", sans-serif; }
   main { max-width: 900px; margin: 0 auto; padding: 24px 20px 120px; }
-  h1 { font-size: clamp(28px, 5vw, 44px); line-height:1.15; margin:.6em 0 .2em; }
-  h2 { font-size: clamp(22px, 3.5vw, 32px); margin-top: 2.4em; }
+  h1 { font-size: clamp(28px, 5vw, 44px); line-height:1.3; margin:.6em 0 .2em; }
+  h2 { font-size: clamp(22px, 3.5vw, 32px); line-height:1.3; margin-top: 2.4em; }
   section { border-top:1px solid var(--line); padding-top: 8px; }
   .muted { color: var(--muted); }
   #status { padding:10px 14px; background:var(--pane); border:1px solid var(--line); border-radius:8px; }
@@ -150,22 +150,22 @@
 <body>
 <main>
   <div class="slide title-slide"><div class="slide-inner">
-    <h1>Context &amp; Tokens</h1>
-    <p class="muted">Four things to try. Scroll top to bottom.</p>
-    <div id="status">Loading the tokenizer…</div>
+    <h1>บริบทกับโทเค็น</h1>
+    <p class="muted">สี่อย่างให้ลองเล่น เลื่อนจากบนลงล่างได้เลย</p>
+    <div id="status">กำลังโหลดตัวตัดคำเป็นโทเค็น (tokenizer)…</div>
   </div></div>
 
-  <section id="s1" class="slide"><div class="slide-inner"><h2>1. What is a token?</h2><div class="mount"></div></div></section>
-  <section id="s2" class="slide"><div class="slide-inner"><h2>2. The window</h2><div class="mount"></div></div></section>
-  <section id="s3" class="slide"><div class="slide-inner"><h2>3. Why it slows down and eats your limit</h2><div class="mount"></div></div></section>
-  <section id="s4" class="slide"><div class="slide-inner"><h2>4. Where it breaks</h2><div class="mount"></div></div></section>
+  <section id="s1" class="slide"><div class="slide-inner"><h2>1. โทเค็น (token) คืออะไร</h2><div class="mount"></div></div></section>
+  <section id="s2" class="slide"><div class="slide-inner"><h2>2. หน้าต่างบริบท (context window)</h2><div class="mount"></div></div></section>
+  <section id="s3" class="slide"><div class="slide-inner"><h2>3. ทำไมยิ่งคุยยิ่งช้าและกินโควตาเร็ว</h2><div class="mount"></div></div></section>
+  <section id="s4" class="slide"><div class="slide-inner"><h2>4. จุดที่มันพลาด</h2><div class="mount"></div></div></section>
 
-  <section id="s5" class="slide"><div class="slide-inner"><h2>Four rules of thumb</h2>
+  <section id="s5" class="slide"><div class="slide-inner"><h2>สี่ข้อที่ควรจำ</h2>
     <ol>
-      <li><b>New chat per topic.</b> Old turns are dead weight the model re-reads every time.</li>
-      <li><b>Put the question first.</b> Buried questions get worse answers.</li>
-      <li><b>Attach it once, where it's needed.</b> A document you attach sits in the window and gets re-read on every turn after it.</li>
-      <li><b>Shorter beats longer.</b> A tight prompt is faster, cheaper, and more accurate.</li>
+      <li><b>เปิดแชทใหม่ทุกครั้งที่เปลี่ยนเรื่อง</b> ข้อความเก่า ๆ คือภาระที่โมเดลต้องอ่านซ้ำทุกครั้ง</li>
+      <li><b>ถามคำถามไว้ก่อนเลย</b> คำถามที่ฝังอยู่ลึก ๆ มักได้คำตอบที่แย่กว่า</li>
+      <li><b>แนบไฟล์แค่ครั้งเดียว ตรงจุดที่ต้องใช้</b> เอกสารที่แนบเข้าไปจะค้างอยู่ในหน้าต่างบริบท และถูกอ่านซ้ำทุกครั้งหลังจากนั้น</li>
+      <li><b>สั้นดีกว่ายาว</b> คำสั่งที่กระชับจะเร็วกว่า ถูกกว่า และแม่นยำกว่า</li>
     </ol>
   </div></section>
 </main>
@@ -178,11 +178,11 @@ const CONFIG = {
   systemPromptTokens: 1200,
   replyReserveTokens: 8000,
   attachments: [
-    { label: '50-page PDF', tokens: 37000 },
-    { label: 'Spreadsheet export', tokens: 21000 },
-    { label: 'Long email thread', tokens: 4200 }
+    { label: 'PDF ยาว 50 หน้า', tokens: 37000 },
+    { label: 'ไฟล์สเปรดชีตที่ส่งออกมา', tokens: 21000 },
+    { label: 'อีเมลโต้ตอบยาว ๆ', tokens: 4200 }
   ],
-  apiRates: { inputPerMTok: 5, outputPerMTok: 25, note: 'API list price, captured 2026-07-21' }
+  apiRates: { inputPerMTok: 5, outputPerMTok: 25, note: 'ราคาหน้าบัญชีของ API บันทึกไว้เมื่อ 2026-07-21' }
 };
 
 /* LOGIC:START */
@@ -391,13 +391,13 @@ function armGrowIn(container, cols) {
 }
 
 const PRESETS = [
-  { label: 'strawberry', text: 'How many r\'s are in strawberry?' },
-  { label: 'rare word', text: 'Antidisestablishmentarianism is unfalsifiable.' },
-  { label: 'emoji', text: 'Ship it 🍓🚀 — emoji are expensive 🎉' },
-  { label: 'numbers', text: 'Invoice 1234567890 for 42 units at 19.99' },
-  { label: 'same idea, Arabic', text: 'This sentence costs far less in English.\nهذه الجملة نفسها تكلف ضعف عدد الرموز تقريبًا.' },
-  { label: 'code', text: 'function add(a, b) {\n  return a + b;\n}\n' },
-  { label: 'whitespace', text: 'lots     of      spaces\n\n\nand blank lines' }
+  { label: 'สตรอว์เบอร์รี', text: 'How many r\'s are in strawberry?' },
+  { label: 'คำหายาก', text: 'Antidisestablishmentarianism is unfalsifiable.' },
+  { label: 'อิโมจิ', text: 'Ship it 🍓🚀 — emoji are expensive 🎉' },
+  { label: 'ตัวเลข', text: 'Invoice 1234567890 for 42 units at 19.99' },
+  { label: 'ไทยเทียบอังกฤษ', text: 'This sentence costs far fewer tokens in English.\nประโยคเดียวกันนี้กินโทเค็นมากกว่าหลายเท่าเมื่อเขียนเป็นภาษาไทย' },
+  { label: 'โค้ด', text: 'function add(a, b) {\n  return a + b;\n}\n' },
+  { label: 'ช่องว่าง', text: 'lots     of      spaces\n\n\nand blank lines' }
 ];
 
 // Rendering one <span> per token gets visibly slow past a few thousand DOM
@@ -409,25 +409,25 @@ const MAX_CHIPS = 1200;
 
 function initTokenizer(root) {
   root.innerHTML = `
-    <p>Type anything. The model never sees your letters — it sees these chunks.</p>
-    <p class="muted">Counted with <code>cl100k_base</code>, a published tokenizer standing in for
-    ${CONFIG.model}'s own, which Anthropic has not published. Counts are accurate to within a few
-    percent, and every effect this page shows holds for Claude too.</p>
+    <p>พิมพ์อะไรก็ได้ โมเดลไม่เคยเห็นตัวอักษรของคุณจริง ๆ มันเห็นแค่ชิ้นเล็ก ๆ แบบนี้ ที่เรียกว่าโทเค็น (token)</p>
+    <p class="muted">นับด้วย <code>cl100k_base</code> ตัวตัดคำที่เผยแพร่แบบสาธารณะ ใช้แทนตัวตัดคำจริงของ
+    ${CONFIG.model} ซึ่งทาง Anthropic ไม่ได้เปิดเผยไว้ ตัวเลขที่นับได้จะคลาดเคลื่อนไม่กี่เปอร์เซ็นต์
+    และทุกปรากฏการณ์ที่หน้านี้แสดงให้ดู ก็เป็นจริงกับ Claude เช่นกัน</p>
     <div class="presets"></div>
-    <textarea id="tk-input">Tokens are the unit models actually read.</textarea>
-    <p class="muted notice-fade" id="tk-trunc" style="display:none">Only counting the first 20,000 characters — the rest is ignored below.</p>
+    <textarea id="tk-input">โทเค็นคือหน่วยที่โมเดลใช้อ่านข้อความจริง ๆ</textarea>
+    <p class="muted notice-fade" id="tk-trunc" style="display:none">นับแค่ 20,000 ตัวอักษรแรกเท่านั้น ส่วนที่เหลือด้านล่างจะไม่ถูกนับ</p>
     <div class="stats">
-      <div><b id="tk-tokens">0</b><br><span class="muted">tokens</span></div>
-      <div><b id="tk-chars">0</b><br><span class="muted">characters</span></div>
-      <div><b id="tk-ratio">0</b><br><span class="muted">characters per token</span></div>
+      <div><b id="tk-tokens">0</b><br><span class="muted">โทเค็น</span></div>
+      <div><b id="tk-chars">0</b><br><span class="muted">ตัวอักษร</span></div>
+      <div><b id="tk-ratio">0</b><br><span class="muted">ตัวอักษรต่อโทเค็น</span></div>
     </div>
     <div class="chips" id="tk-chips"></div>
-    <p class="muted notice-fade" id="tk-chip-cap" style="display:none">Showing the first ${MAX_CHIPS.toLocaleString()}
-    chunks — the token count above includes the rest, they just aren't drawn.</p>
-    <p class="takeaway">Common words are usually a single chunk, so the model never actually sees the
-    letters inside them — that's why it miscounts them. Rarer words and other languages shatter into
-    many chunks instead of one, which can cost several times as much of your context for the same
-    meaning (almost five times, in the Arabic example above).</p>`;
+    <p class="muted notice-fade" id="tk-chip-cap" style="display:none">แสดงแค่ ${MAX_CHIPS.toLocaleString()}
+    ชิ้นแรกเท่านั้น ตัวเลขจำนวนโทเค็นด้านบนรวมส่วนที่เหลือไว้แล้ว เพียงแต่ไม่ได้วาดให้ดู</p>
+    <p class="takeaway">คำที่ใช้บ่อยมักถูกนับเป็นโทเค็นเดียว โมเดลจึงไม่ได้เห็นตัวอักษรข้างในจริง ๆ
+    นี่คือเหตุผลที่มันนับตัวอักษรผิดบ่อย ๆ ส่วนคำที่ใช้ไม่บ่อยหรือภาษาอื่นจะถูกสับเป็นหลายโทเค็นแทนที่จะเป็นโทเค็นเดียว
+    ซึ่งกินพื้นที่ในหน้าต่างบริบทมากกว่าหลายเท่าสำหรับความหมายเดียวกัน (ในตัวอย่างไทยกับอังกฤษด้านบน
+    ต่างกันประมาณ 6.5 เท่า)</p>`;
 
   const input = root.querySelector('#tk-input');
   const chips = root.querySelector('#tk-chips');
@@ -449,7 +449,7 @@ function initTokenizer(root) {
     root.querySelector('#tk-ratio').textContent = count ? (text.length / count).toFixed(1) : '0';
     chips.textContent = '';
     if (APPROXIMATE) {
-      chips.innerHTML = '<span class="muted">Chunk view needs the tokenizer, which did not load.</span>';
+      chips.innerHTML = '<span class="muted">มุมมองการแบ่งชิ้นต้องใช้ตัวตัดคำเป็นโทเค็น ซึ่งโหลดไม่สำเร็จ</span>';
       root.querySelector('#tk-chip-cap').style.display = 'none';
       return;
     }
@@ -477,21 +477,21 @@ function initWindow(root) {
   let prevDropped = new Set();
 
   root.innerHTML = `
-    <p>Everything the model can hold at once — ${CONFIG.windowTokens.toLocaleString()} tokens for
-    ${CONFIG.model}. It all shares one bar.</p>
+    <p>ทุกอย่างที่โมเดลเก็บไว้ในหัวพร้อมกันได้ — ${CONFIG.windowTokens.toLocaleString()} โทเค็น สำหรับ
+    ${CONFIG.model} ทั้งหมดนี้อยู่ในแถบเดียวกัน</p>
     <div class="bar" id="w-bar"></div>
     <div class="presets" id="w-controls">
-      <button data-act="turn">+ chat turn</button>
-      <button data-act="turn10">+ 10 chat turns</button>
-      <button data-act="reset">reset</button>
+      <button data-act="turn">+ เพิ่ม 1 รอบสนทนา</button>
+      <button data-act="turn10">+ เพิ่ม 10 รอบสนทนา</button>
+      <button data-act="reset">รีเซ็ต</button>
     </div>
     <p class="muted" id="w-summary"></p>
     <div class="turnlist" id="w-turns"></div>
-    <p>Paste your own text to see it measured against the window:</p>
-    <textarea id="w-paste" placeholder="Paste an email, a report, anything."></textarea>
-    <p class="muted notice-fade" id="w-trunc" style="display:none">Only counting the first 200,000 characters of your paste — the rest was cut off.</p>
-    <p class="takeaway" id="w-takeaway">When the bar is full, the oldest turns fall out of it.
-    That is what "it forgot what I said" actually means.</p>`;
+    <p>วางข้อความของคุณเองเพื่อดูว่ากินพื้นที่ในหน้าต่างบริบทแค่ไหน</p>
+    <textarea id="w-paste" placeholder="วางอีเมล รายงาน หรืออะไรก็ได้ตรงนี้"></textarea>
+    <p class="muted notice-fade" id="w-trunc" style="display:none">นับแค่ 200,000 ตัวอักษรแรกของสิ่งที่คุณวาง ส่วนที่เหลือถูกตัดออกไป</p>
+    <p class="takeaway" id="w-takeaway">เมื่อแถบเต็ม รอบสนทนาที่เก่าที่สุดจะถูกดันออกไป
+    นั่นแหละคือความหมายจริง ๆ ของ "มันลืมที่เราพูดไปแล้ว"</p>`;
 
   const controls = root.querySelector('#w-controls');
   for (const att of CONFIG.attachments) {
@@ -553,11 +553,11 @@ function initWindow(root) {
     const demand = CONFIG.systemPromptTokens + r.attachmentTokens + r.historyTokens + CONFIG.replyReserveTokens;
     const denom = Math.max(CONFIG.windowTokens, demand);
     const segs = [
-      ['seg-sys', CONFIG.systemPromptTokens, 'instructions'],
-      ['seg-att', r.attachmentTokens, 'attached'],
-      ['seg-hist', r.historyTokens, 'chat history'],
-      ['seg-free', r.freeTokens, 'free'],
-      ['seg-reply', CONFIG.replyReserveTokens, 'room to reply']
+      ['seg-sys', CONFIG.systemPromptTokens, 'คำสั่งระบบ'],
+      ['seg-att', r.attachmentTokens, 'ไฟล์แนบ'],
+      ['seg-hist', r.historyTokens, 'ประวัติแชท'],
+      ['seg-free', r.freeTokens, 'ว่าง'],
+      ['seg-reply', CONFIG.replyReserveTokens, 'ที่เผื่อไว้ตอบ']
     ];
     const bar = root.querySelector('#w-bar');
     bar.classList.toggle('overflow', r.overflow);
@@ -568,14 +568,14 @@ function initWindow(root) {
       const pct = (tokens / denom) * 100;
       el.style.width = `${pct}%`;
       el.textContent = pct > 6 ? label : '';
-      el.title = `${label}: ${tokens.toLocaleString()} tokens`;
+      el.title = `${label}: ${tokens.toLocaleString()} โทเค็น`;
       bar.append(el);
     }
     root.querySelector('#w-summary').textContent = r.overflow
       ? (CONFIG.systemPromptTokens + r.attachmentTokens > CONFIG.windowTokens
-        ? `Instructions and attachments alone are ${(CONFIG.systemPromptTokens + r.attachmentTokens).toLocaleString()} tokens — more than the whole ${CONFIG.windowTokens.toLocaleString()}-token window. Nothing else fits.`
-        : `Instructions, attachments, and history leave no room to reserve a reply — the model has nowhere left to answer.`)
-      : `${r.usedTokens.toLocaleString()} of ${CONFIG.windowTokens.toLocaleString()} tokens used · ${r.dropped.length} turn(s) pushed out`;
+        ? `แค่คำสั่งระบบกับไฟล์แนบก็ปาไป ${(CONFIG.systemPromptTokens + r.attachmentTokens).toLocaleString()} โทเค็นแล้ว — มากกว่าหน้าต่างบริบททั้งหมดที่มี ${CONFIG.windowTokens.toLocaleString()} โทเค็น จึงไม่เหลือที่ให้อย่างอื่นเลย`
+        : `คำสั่งระบบ ไฟล์แนบ และประวัติแชท กินพื้นที่จนไม่เหลือที่ไว้ตอบกลับ โมเดลจึงไม่มีที่เหลือให้ตอบคุณแล้ว`)
+      : `ใช้ไป ${r.usedTokens.toLocaleString()} จาก ${CONFIG.windowTokens.toLocaleString()} โทเค็น · ดันออก ${r.dropped.length} รอบสนทนา`;
     const list = root.querySelector('#w-turns');
     list.textContent = '';
     const dropped = new Set(r.dropped);
@@ -589,7 +589,7 @@ function initWindow(root) {
       // created already-'.gone' — that's a no-op state, not an animation,
       // so history never replays.
       el.className = 'turn' + (dropped.has(i) && !isNew ? ' gone' : '');
-      el.textContent = `turn ${i + 1} · ${tokens.toLocaleString()}`;
+      el.textContent = `รอบที่ ${i + 1} · ${tokens.toLocaleString()}`;
       list.append(el);
       if (isNew) newlyDropped.push(el);
     });
@@ -608,10 +608,10 @@ function initWindow(root) {
 // literal below) so a Thai pass can find and replace them without hunting
 // through markup or animation logic.
 const BURN_LABELS = {
-  taskGroups: ['Task 1', 'Task 2', 'Task 3'],
-  playIdle: '▶ Play turn by turn',
-  playRunning: 'Playing…',
-  playDone: '↺ Replay'
+  taskGroups: ['งานที่ 1', 'งานที่ 2', 'งานที่ 3'],
+  playIdle: '▶ เล่นทีละรอบ',
+  playRunning: 'กำลังเล่น…',
+  playDone: '↺ เล่นซ้ำ'
 };
 
 function initBurn(root) {
@@ -636,33 +636,33 @@ function initBurn(root) {
   const splitTotalStr = split.at(-1).cumulative.toLocaleString();
 
   root.innerHTML = `
-    <p>Every time you hit send, the model re-reads the whole conversation. Turn 20 is not the same
-    size as turn 1 — it carries all nineteen turns before it. Same three tasks, twenty turns either way.</p>
+    <p>ทุกครั้งที่กดส่งข้อความ โมเดลจะอ่านบทสนทนาทั้งหมดซ้ำอีกครั้ง รอบที่ 20 จึงไม่เท่ากับรอบที่ 1 —
+    เพราะมันแบกรอบก่อนหน้าทั้งสิบเก้ารอบไว้ด้วย งานสามอย่างเหมือนกัน ยี่สิบรอบเท่ากัน ต่างกันแค่วิธีจัดแชท</p>
     <div class="presets" id="b-controls">
       <button type="button" id="b-play">${BURN_LABELS.playIdle}</button>
     </div>
     <div class="split2">
       <div>
-        <h3>One long chat</h3>
+        <h3>แชทยาวเส้นเดียว</h3>
         <div class="task-row" id="b-long-tasks"></div>
         <div class="cols grouped" id="b-long"></div>
-        <p class="muted">Total processed: <b id="b-long-total">${longTotalStr}</b> tokens</p>
+        <p class="muted">ประมวลผลรวม: <b id="b-long-total">${longTotalStr}</b> โทเค็น</p>
       </div>
       <div>
-        <h3>Same work, a fresh chat every 7 turns</h3>
+        <h3>งานเดียวกัน แต่เปิดแชทใหม่ทุก 7 รอบ</h3>
         <div class="task-row" id="b-split-tasks"></div>
         <div class="cols grouped" id="b-split"></div>
-        <p class="muted">Total processed: <b id="b-split-total">${splitTotalStr}</b> tokens</p>
+        <p class="muted">ประมวลผลรวม: <b id="b-split-total">${splitTotalStr}</b> โทเค็น</p>
       </div>
     </div>
-    <p>That is <b>${(long.at(-1).cumulative / split.at(-1).cumulative).toFixed(1)}×</b> more work for
-    the same conversation — which is why a long chat gets slower and eats your usage limit faster.</p>
+    <p>นั่นคืองานที่มากกว่าถึง <b>${(long.at(-1).cumulative / split.at(-1).cumulative).toFixed(1)} เท่า</b>
+    สำหรับบทสนทนาชุดเดียวกัน — นี่คือเหตุผลที่แชทยาว ๆ ยิ่งคุยยิ่งช้า และกินโควตาการใช้งานเร็วขึ้นเรื่อย ๆ</p>
     <details>
-      <summary>If you were paying API rates instead of a subscription</summary>
-      <p class="muted">Long chat ≈ $${dollars(long.at(-1).cumulative)} versus
-      $${dollars(split.at(-1).cumulative)} split. ${CONFIG.apiRates.note}.</p>
+      <summary>ถ้าคุณจ่ายตามราคา API แทนที่จะเป็นแบบสมัครสมาชิก</summary>
+      <p class="muted">แชทยาวเส้นเดียว ≈ $${dollars(long.at(-1).cumulative)} เทียบกับ
+      $${dollars(split.at(-1).cumulative)} ถ้าแยกแชท (${CONFIG.apiRates.note})</p>
     </details>
-    <p class="takeaway">Start a new chat when the topic changes.</p>`;
+    <p class="takeaway">เปลี่ยนเรื่องเมื่อไร ก็เปิดแชทใหม่เมื่อนั้น</p>`;
 
   const buildTaskRow = (id) => {
     const row = root.querySelector(id);
@@ -696,7 +696,7 @@ function initBurn(root) {
         const col = document.createElement('div');
         col.className = `col ${cls}`;
         col.style.height = `${(point.processed / peak) * 100}%`;
-        col.title = `${point.processed.toLocaleString()} tokens processed this turn`;
+        col.title = `${point.processed.toLocaleString()} โทเค็นที่ประมวลผลในรอบนี้`;
         group.append(col);
         cols.push(col);
       }
@@ -793,21 +793,21 @@ const LIVE_FILLER = ('Quarterly logistics review. Freight volumes held steady ac
 function appendLivePanel(root) {
   const wrap = document.createElement('details');
   wrap.innerHTML = `
-    <summary>Advanced: re-run this live with your own API key</summary>
-    <p class="muted"><b>Only do this on your own machine.</b> The key stays in this tab's memory,
-    is never saved and never leaves your browser except in the request to Anthropic. Reloading the
-    page clears it. Do not paste a shared or production key on a workshop laptop.</p>
+    <summary>ขั้นสูง: ลองรันจริงด้วยคีย์ API ของคุณเอง</summary>
+    <p class="muted"><b>ทำตรงนี้เฉพาะบนเครื่องของคุณเองเท่านั้น</b> คีย์จะถูกเก็บไว้ในหน่วยความจำของแท็บนี้ชั่วคราว
+    ไม่ถูกบันทึกและไม่หลุดออกจากเบราว์เซอร์ของคุณ ยกเว้นตอนส่งคำขอไปที่ Anthropic รีเฟรชหน้านี้เมื่อไร
+    คีย์จะหายไปทันที อย่าวางคีย์ที่ใช้งานจริงหรือคีย์ที่ใช้ร่วมกับคนอื่นบนเครื่องคอมพิวเตอร์ของงานเวิร์กช็อป</p>
     <input id="h-key" type="password" placeholder="sk-ant-..." autocomplete="off"
            style="width:100%;padding:10px;background:var(--pane);color:var(--fg);border:1px solid var(--line);border-radius:8px">
-    <div class="presets"><button id="h-run">run all three depths</button></div>
+    <div class="presets"><button id="h-run">รันทั้งสามระดับความลึก</button></div>
     <div id="h-live" class="muted" style="white-space:pre-wrap"></div>`;
   root.append(wrap);
 
   const out = wrap.querySelector('#h-live');
   wrap.querySelector('#h-run').onclick = async () => {
     const key = wrap.querySelector('#h-key').value.trim();
-    if (!key) { out.textContent = 'Paste a key first.'; return; }
-    out.textContent = 'Running…';
+    if (!key) { out.textContent = 'วางคีย์ก่อนนะ'; return; }
+    out.textContent = 'กำลังรัน…';
     const lines = [];
     for (const depth of [0.1, 0.5, 0.9]) {
       const doc = LIVE_FILLER.slice(0, Math.floor(LIVE_FILLER.length * depth)) +
@@ -830,10 +830,10 @@ function appendLivePanel(root) {
         const json = await res.json();
         const answer = res.ok
           ? json.content.map(b => b.text || '').join('').trim()
-          : `error ${res.status}: ${json.error?.message || 'request failed'}`;
-        lines.push(`${Math.round(depth * 100)}% in → ${answer}`);
+          : `เกิดข้อผิดพลาด ${res.status}: ${json.error?.message || 'คำขอล้มเหลว'}`;
+        lines.push(`ฝังลึก ${Math.round(depth * 100)}% → ${answer}`);
       } catch (err) {
-        lines.push(`${Math.round(depth * 100)}% in → request failed: ${err.message}`);
+        lines.push(`ฝังลึก ${Math.round(depth * 100)}% → คำขอล้มเหลว: ${err.message}`);
       }
       out.textContent = lines.join('\n');
     }
@@ -841,9 +841,9 @@ function appendLivePanel(root) {
 }
 
 function haystackPosLabel(depth) {
-  if (depth === 0) return 'Start';
-  if (depth === 1) return 'End';
-  if (depth === 0.5) return 'Middle';
+  if (depth === 0) return 'ต้นเรื่อง';
+  if (depth === 1) return 'ท้ายเรื่อง';
+  if (depth === 0.5) return 'กลางเรื่อง';
   return `${Math.round(depth * 100)}%`;
 }
 
@@ -853,18 +853,16 @@ function initHaystack(root) {
     const worst = LITERATURE_CURVE.points.reduce((a, b) => (b.accuracy < a.accuracy ? b : a));
     const last = LITERATURE_CURVE.points.at(-1);
     root.innerHTML = `
-      <p>Where a fact sits inside a long document changes how reliably the model finds it. Facts near
-      the start or the end are recalled well; facts buried in the middle are recalled worst — even
-      though the model reads every word either way.</p>
+      <p>ตำแหน่งที่ข้อมูลชิ้นหนึ่งอยู่ในเอกสารยาว ๆ มีผลต่อความแม่นยำที่โมเดลจะหาเจอ ข้อมูลที่อยู่ใกล้ต้นหรือใกล้ท้าย
+      มักถูกจำได้ดี ส่วนข้อมูลที่ฝังอยู่ตรงกลางมักถูกจำได้แย่ที่สุด — ทั้งที่โมเดลอ่านทุกคำเหมือนกันหมด</p>
       <div class="h-vals">${LITERATURE_CURVE.points.map(p => `<div>${Math.round(p.accuracy * 100)}%</div>`).join('')}</div>
       <div class="cols" id="h-curve"></div>
       <div class="h-pos">${LITERATURE_CURVE.points.map(p => `<div>${haystackPosLabel(p.depth)}</div>`).join('')}</div>
-      <p class="muted">Approximate — read off a published chart, not exact figures. Recall fell from
-      ${Math.round(first.accuracy * 100)}% near the start to ${Math.round(worst.accuracy * 100)}% in the
-      middle, then recovered to ${Math.round(last.accuracy * 100)}% at the end.
-      Source: ${LITERATURE_CURVE.source}. No live model was called.</p>
-      <p class="takeaway">Put your actual question first, and keep the material short enough that
-      the answer is not buried.</p>`;
+      <p class="muted">เป็นตัวเลขโดยประมาณ อ่านจากกราฟที่เผยแพร่ไว้ ไม่ใช่ตัวเลขที่แม่นยำเป๊ะ ความแม่นยำในการจำลดลงจาก
+      ${Math.round(first.accuracy * 100)}% ใกล้ต้นเรื่อง เหลือ ${Math.round(worst.accuracy * 100)}% ตรงกลางเรื่อง
+      แล้วกลับขึ้นไปที่ ${Math.round(last.accuracy * 100)}% ท้ายเรื่อง
+      แหล่งที่มา: ${LITERATURE_CURVE.source} ไม่มีการเรียกใช้โมเดลจริงในตัวอย่างนี้</p>
+      <p class="takeaway">ถามคำถามจริงของคุณไว้ต้น ๆ และทำเนื้อหาให้สั้นพอ ไม่ให้คำตอบจมหายไปตรงกลาง</p>`;
     const box = root.querySelector('#h-curve');
     const cols = [];
     for (const p of LITERATURE_CURVE.points) {
@@ -872,7 +870,7 @@ function initHaystack(root) {
       const col = document.createElement('div');
       col.className = 'col' + (isMiddle ? ' mid' : '');
       col.style.height = `${p.accuracy * 100}%`;
-      col.title = `${Math.round(p.depth * 100)}% through the document: ${Math.round(p.accuracy * 100)}% recall (approximate)`;
+      col.title = `${Math.round(p.depth * 100)}% ของเอกสาร: จำได้ ${Math.round(p.accuracy * 100)}% (ค่าประมาณ)`;
       box.append(col);
       cols.push(col);
     }
@@ -882,23 +880,21 @@ function initHaystack(root) {
   }
 
   root.innerHTML = `
-    <p>One fact was hidden inside a long report, at three different depths, and the same question was
-    asked each time.</p>
-    <p class="muted">Recorded run · ${RECORDED_RUN.model} · ${RECORDED_RUN.capturedAt} ·
-    ${RECORDED_RUN.results[0].inputTokens.toLocaleString()} input tokens per run. Not live.</p>
+    <p>มีข้อมูลชิ้นหนึ่งถูกซ่อนไว้ในรายงานยาว ๆ ที่ความลึกสามระดับ แล้วถูกถามคำถามเดียวกันในทุกระดับ</p>
+    <p class="muted">รันที่บันทึกไว้ล่วงหน้า · ${RECORDED_RUN.model} · ${RECORDED_RUN.capturedAt} ·
+    ${RECORDED_RUN.results[0].inputTokens.toLocaleString()} โทเค็นขาเข้าต่อรัน ไม่ใช่การเรียกสด</p>
     <div class="presets" id="h-buttons"></div>
-    <p><b>Question:</b> ${RECORDED_RUN.question}</p>
-    <div id="h-answer" class="muted">Pick a position above.</div>
-    <p class="takeaway">Put your actual question first, and keep the material short enough that the
-    answer is not buried.</p>`;
+    <p><b>คำถาม:</b> ${RECORDED_RUN.question}</p>
+    <div id="h-answer" class="muted">เลือกตำแหน่งด้านบนได้เลย</div>
+    <p class="takeaway">ถามคำถามจริงของคุณไว้ต้น ๆ และทำเนื้อหาให้สั้นพอ ไม่ให้คำตอบจมหายไปตรงกลาง</p>`;
 
   const answerEl = root.querySelector('#h-answer');
   for (const r of RECORDED_RUN.results) {
     const b = document.createElement('button');
-    b.textContent = `buried ${Math.round(r.depth * 100)}% in`;
+    b.textContent = `ฝังลึก ${Math.round(r.depth * 100)}%`;
     b.onclick = () => {
-      answerEl.innerHTML = `<b>${r.correct ? '✓ found it' : '✗ missed it'}</b><br>
-        <span class="muted">Model answered:</span> ${r.answer.replace(/</g, '&lt;')}`;
+      answerEl.innerHTML = `<b>${r.correct ? '✓ หาเจอ' : '✗ หาไม่เจอ'}</b><br>
+        <span class="muted">โมเดลตอบว่า:</span> ${r.answer.replace(/</g, '&lt;')}`;
     };
     root.querySelector('#h-buttons').append(b);
   }
@@ -928,8 +924,8 @@ function runSelfTest() {
   strip.style.cssText = 'position:fixed;left:0;right:0;bottom:0;padding:10px 16px;font:14px ui-monospace,monospace;' +
     `background:${failed.length ? '#5a1e1e' : '#1e4620'};color:#fff;z-index:9`;
   strip.textContent = failed.length
-    ? `${failed.length} FAILED: ${failed.map(f => f.name).join(', ')}`
-    : `all ${checks.length} checks passed`;
+    ? `${failed.length} ล้มเหลว: ${failed.map(f => f.name).join(', ')}`
+    : `ผ่านทั้งหมด ${checks.length} รายการ`;
   document.body.append(strip);
   document.body.style.paddingBottom = `${strip.offsetHeight}px`;
 }
@@ -1006,7 +1002,7 @@ armSlideReveal();
 function initOverflowHint() {
   const hint = document.createElement('div');
   hint.id = 'more-hint';
-  hint.textContent = 'more below ↓';
+  hint.textContent = 'เลื่อนลงเพื่อดูเพิ่ม ↓';
   document.body.append(hint);
 
   let current = null;
@@ -1043,8 +1039,8 @@ async function boot() {
     fadeAndRemoveStatus(statusEl);
   } catch (err) {
     APPROXIMATE = true;
-    statusEl.innerHTML = '<strong>Heads up:</strong> your browser could not unpack the tokenizer, ' +
-      'so counts on this page are estimates rather than exact. Everything still works.';
+    statusEl.innerHTML = '<strong>แจ้งให้ทราบ:</strong> เบราว์เซอร์ของคุณแตกไฟล์ตัวตัดคำเป็นโทเค็นไม่ได้ ' +
+      'ตัวเลขในหน้านี้จึงเป็นการประมาณ ไม่ใช่ค่าที่แม่นยำ แต่ส่วนอื่น ๆ ของหน้านี้ยังใช้งานได้ตามปกติ';
     statusEl.style.borderColor = 'var(--warn)';
   }
   countTokens = APPROXIMATE
