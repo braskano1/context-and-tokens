@@ -19,6 +19,13 @@
   .chip { padding:2px 4px; border-radius:4px; font:14px/1.4 ui-monospace, monospace; white-space:pre-wrap; }
   .chip:nth-child(odd) { background:#2b3550; }
   .chip:nth-child(even) { background:#38304a; }
+  /* A token boundary can fall inside a multi-byte character (routine for Thai
+     under a BPE tokenizer sized around English/code). TEXT_DECODER's
+     fatal:false then renders that partial byte sequence as U+FFFD. Rather
+     than hide it, .chip-partial marks it as a deliberate "this chip is only
+     part of a letter" state — dashed border + dimmed, never removed or
+     merged, so the chip and the token count stay truthful. */
+  .chip.chip-partial { border:1px dashed var(--muted); opacity:.6; }
   .stats { display:flex; gap:20px; flex-wrap:wrap; font-variant-numeric:tabular-nums; }
   .stats b { font-size:22px; }
   .presets { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
@@ -424,6 +431,8 @@ function initTokenizer(root) {
     <div class="chips" id="tk-chips"></div>
     <p class="muted notice-fade" id="tk-chip-cap" style="display:none">แสดงแค่ ${MAX_CHIPS.toLocaleString()}
     ชิ้นแรกเท่านั้น ตัวเลขจำนวนโทเค็นด้านบนรวมส่วนที่เหลือไว้แล้ว เพียงแต่ไม่ได้วาดให้ดู</p>
+    <p class="muted notice-fade" id="tk-partial" style="display:none">ตัวอักษรไทยหนึ่งตัวมักถูกแบ่งเป็นหลายโทเค็น
+    ชิ้นที่มีกรอบเส้นประด้านบนจึงมีแค่เศษหนึ่งของตัวอักษร แสดงผลลำพังไม่ได้</p>
     <p class="takeaway">คำที่ใช้บ่อยมักถูกนับเป็นโทเค็นเดียว โมเดลจึงไม่ได้เห็นตัวอักษรข้างในจริง ๆ
     นี่คือเหตุผลที่มันนับตัวอักษรผิดบ่อย ๆ ส่วนคำที่ใช้ไม่บ่อยหรือภาษาอื่นจะถูกสับเป็นหลายโทเค็นแทนที่จะเป็นโทเค็นเดียว
     ซึ่งกินพื้นที่ในหน้าต่างบริบทมากกว่าหลายเท่าสำหรับความหมายเดียวกัน (ในตัวอย่างไทยกับอังกฤษด้านบน
@@ -451,17 +460,27 @@ function initTokenizer(root) {
     if (APPROXIMATE) {
       chips.innerHTML = '<span class="muted">มุมมองการแบ่งชิ้นต้องใช้ตัวตัดคำเป็นโทเค็น ซึ่งโหลดไม่สำเร็จ</span>';
       root.querySelector('#tk-chip-cap').style.display = 'none';
+      root.querySelector('#tk-partial').style.display = 'none';
       return;
     }
     const tokens = encodeDetailed(RANKS, text);
     root.querySelector('#tk-chip-cap').style.display = tokens.length > MAX_CHIPS ? '' : 'none';
+    // A chip whose decoded text contains U+FFFD is not corrupt — it is a
+    // token that only covers part of a multi-byte character's bytes (see
+    // TEXT_DECODER above), which is routine for Thai under this tokenizer.
+    // The count itself (`tokens.length`, already reflected in #tk-tokens)
+    // is untouched by this — only how such a chip is drawn changes.
+    let hasPartial = false;
     for (const tok of tokens.slice(0, MAX_CHIPS)) {
       const el = document.createElement('span');
-      el.className = 'chip';
+      const isPartial = tok.text.includes('�');
+      if (isPartial) hasPartial = true;
+      el.className = isPartial ? 'chip chip-partial' : 'chip';
       el.textContent = tok.text.replace(/\n/g, '\\n');
       el.title = `id ${tok.id}`;
       chips.append(el);
     }
+    root.querySelector('#tk-partial').style.display = hasPartial ? '' : 'none';
   }
 
   let timer;
