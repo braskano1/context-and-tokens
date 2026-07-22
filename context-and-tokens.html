@@ -1007,6 +1007,10 @@ function renderContextBar(bar, r, thinkingTokens) {
 // controls can't drift into four slightly different ways of saying it.
 const PLAY_LABELS = { idle: '▶ เล่นอัตโนมัติ', running: 'กำลังเล่น…', done: '↺ เล่นซ้ำ' };
 const NEXT_LABEL = { step: (n, total) => `ถัดไป (${n}/${total})`, done: '↺ เริ่มใหม่' };
+// Demo 2 keeps its own idle label: that button is a send button, and "ส่งข้อความ"
+// is an affordance this audience has pressed a thousand times in a chat app.
+// The generic "เล่นอัตโนมัติ" would make them work out what it does first.
+const SEND_LABELS = { idle: 'ส่งข้อความ', running: 'กำลังส่ง…', done: 'ส่งอีกข้อความ' };
 // Demo 3 only: "รอบที่ 7 จาก 20", not a bare "7/20".
 const NEXT_LABEL_TURNS = { step: (n, total) => `ถัดไป (รอบที่ ${n} จาก ${total})`, done: '↺ เริ่มใหม่' };
 
@@ -1207,7 +1211,7 @@ function initWindow(root) {
     playBtn: sendBtn,
     nextBtn,
     liveEl: summaryEl,
-    playLabels: PLAY_LABELS,
+    playLabels: SEND_LABELS,
     nextLabel: NEXT_LABEL,
     initialIndex: -1 // nothing has been sent yet — no "settled" send to rest on
   });
