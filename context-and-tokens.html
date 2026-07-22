@@ -185,20 +185,16 @@
   /* Matches .task-group's border-left(1px)+padding-left(6px) below, so each
      label's box lines up with the column group it names. */
   .task-row .task-label + .task-label { padding-left:7px; }
-  /* Demo 3's Play and demo 2.1's Play are the deck's "watch this unfold"
-     controls — both charts/bars are already fully, honestly drawn at rest
-     (see each demo's own click-handler comment), so an attendee who never
-     notices Play still sees the true end state, but the effect the button
-     exists to produce (the gap opening turn by turn / the summary block
-     collapsing) goes unseen unless the button reads as worth pressing.
-     Everywhere else on the page a button is a same-weight pill tag (presets,
-     attachments); Play is the only primary action, so .play-btn is the only
-     filled, non-pill button — different silhouette (10px corners, not a
-     999px pill) and colour, not just bigger. Dark text (--bg literal,
-     matching the button's own filled background family) on --accent
-     measures ~7.5:1, same pairing already verified for .takeaway's lead-in
-     above. Shared class (not one ID per button) so both Play buttons stay
-     visually identical rather than two copies of the same rule. */
+  /* Every demo's auto-play button (see createStepper()) is the deck's one
+     "watch this unfold" control — every chart/bar is already fully, honestly
+     drawn at rest, so an attendee who never touches it still sees the true
+     end state, but the effect it produces goes unseen unless it reads as
+     worth pressing. Everywhere else a button is a same-weight pill tag
+     (presets, attachments, the sibling "ถัดไป" step control); auto-play is
+     the only primary action, so .play-btn is the only filled, non-pill
+     button. Dark text (--bg literal) on --accent measures ~7.5:1, same
+     pairing as .takeaway's lead-in. Shared class so all four Play buttons
+     stay visually identical. */
   .play-btn { background:var(--accent); color:var(--bg); border-color:var(--accent);
     border-radius:10px; font-weight:700; padding:8px 18px; }
   .play-btn:hover { background:#8fb4ff; border-color:#8fb4ff; }
@@ -812,8 +808,9 @@ function initTokenizer(root) {
 // pasted error/log = a big `question`) and how much reasoning the answer
 // itself implies — not with `answer` length alone, since a short answer can
 // still follow a lot of thinking. It is never carried into the conversation
-// history that gets resent (see sendTurn() below) — that's the whole point
-// of the "กำลังคิด" segment fading out at the end of a real send.
+// history that gets resent (see initWindow()'s buildSendSteps() below) —
+// that's the whole point of the "กำลังคิด" segment fading out at the end of
+// a real send.
 const TURN_SHAPES = [
   { question: 40,  thinking: 60,  answer: 100 },
   { question: 120, thinking: 380, answer: 500 },
@@ -837,8 +834,9 @@ const TURN_SIZES = TURN_SHAPES.map(t => t.question + t.answer);
 // The one place that decides "what size is the next turn" — both addTurn()
 // and simulateFill() below call this instead of indexing TURN_SIZES
 // themselves, so there's only one expression that could ever get the cycle
-// wrong. sendTurn() indexes TURN_SHAPES with the identical
-// `turns.length % length` expression for the same reason, one level up.
+// wrong. initWindow()'s buildSendSteps() indexes TURN_SHAPES with the
+// identical `turns.length % length` expression for the same reason, one
+// level up.
 function nextTurnSize(turns) {
   return TURN_SIZES[turns.length % TURN_SIZES.length];
 }
@@ -1005,6 +1003,99 @@ function renderContextBar(bar, r, thinkingTokens) {
   }
 }
 
+// Shared control copy (see createStepper() below) so the four demos'
+// controls can't drift into four slightly different ways of saying it.
+const PLAY_LABELS = { idle: '▶ เล่นอัตโนมัติ', running: 'กำลังเล่น…', done: '↺ เล่นซ้ำ' };
+const NEXT_LABEL = { step: (n, total) => `ถัดไป (${n}/${total})`, done: '↺ เริ่มใหม่' };
+// Demo 3 only: "รอบที่ 7 จาก 20", not a bare "7/20".
+const NEXT_LABEL_TURNS = { step: (n, total) => `ถัดไป (รอบที่ ${n} จาก ${total})`, done: '↺ เริ่มใหม่' };
+
+// Shared step-through engine for all four animated demos — owns the two
+// controls that walk a fixed list of steps (the existing auto-play button,
+// and the new "ถัดไป" next button), so behaviour can't drift between demos
+// and Next always cancels an in-flight Play (same runToken pattern every
+// demo used for its own bespoke chain) rather than fighting it.
+//
+// getSteps() returns [{ apply(), announce(), playAnnounce(), playDelay }],
+// called up front and again whenever a run (re)starts at step one (only
+// initWindow's steps depend on state, so only it rebuilds each cycle).
+// apply() is this step's complete DOM state (never incremental). announce()
+// is the Thai sentence spoken into `liveEl` on manual Next, every step —
+// return nothing to leave the region as apply() already left it.
+// playAnnounce() is the sparser auto-play announcement (usually the final
+// step only; demo 3 also speaks the first and every 5th). playDelay is the
+// ms to wait, during auto-play, before this step lands.
+//
+// initialIndex: the three scripted demos already show their complete result
+// at rest, so they start on the last step ("restart"); initWindow has no
+// such default (nothing sent yet) and starts at -1.
+function createStepper({ getSteps, playBtn, nextBtn, liveEl, playLabels, nextLabel, initialIndex }) {
+  let steps = getSteps();
+  let index = initialIndex;
+  let runToken = 0;
+
+  const paintNext = () => {
+    nextBtn.textContent = index === steps.length - 1
+      ? nextLabel.done
+      : nextLabel.step(index + 2, steps.length);
+  };
+  const paintPlay = (mode) => {
+    playBtn.disabled = mode === 'playing';
+    playBtn.textContent = mode === 'playing' ? playLabels.running
+      : mode === 'done' ? playLabels.done
+      : playLabels.idle;
+  };
+  const speak = (text) => { if (text) liveEl.textContent = text; };
+
+  paintNext();
+  paintPlay('idle');
+
+  function cancelPlay() {
+    runToken++; // invalidates any pending auto-play timeout
+    paintPlay('idle');
+  }
+
+  nextBtn.addEventListener('click', () => {
+    cancelPlay();
+    const wrapping = index === -1 || index === steps.length - 1;
+    if (wrapping) steps = getSteps();
+    index = wrapping ? 0 : index + 1;
+    steps[index].apply();
+    paintNext();
+    speak(steps[index].announce && steps[index].announce());
+  });
+
+  playBtn.addEventListener('click', () => {
+    const myRun = ++runToken;
+    steps = getSteps();
+    if (REDUCE_MOTION) {
+      index = steps.length - 1;
+      steps[index].apply();
+      paintNext();
+      speak(steps[index].playAnnounce && steps[index].playAnnounce());
+      paintPlay('done');
+      return;
+    }
+    paintPlay('playing');
+    let i = 0;
+    const tick = () => {
+      if (myRun !== runToken) return; // superseded by Next or another Play press
+      index = i;
+      steps[i].apply();
+      paintNext();
+      speak(steps[i].playAnnounce && steps[i].playAnnounce());
+      i++;
+      if (i < steps.length) setTimeout(tick, steps[i].playDelay);
+      else paintPlay('done');
+    };
+    setTimeout(tick, steps[0].playDelay);
+  });
+
+  // forceIdle: repaints Next for a control (e.g. "รีเซ็ต") that redraws
+  // the demo itself.
+  return { cancelPlay, forceIdle(i = steps.length - 1) { index = i; paintNext(); } };
+}
+
 function initWindow(root) {
   const state = { attachments: [], turns: [], pasted: 0 };
   // Tracks which turn indices were already evicted as of the previous
@@ -1024,7 +1115,8 @@ function initWindow(root) {
     <p class="muted">โทเค็นคิดใช้พื้นที่แค่ตอนตอบ พอตอบเสร็จก็หายไป ไม่ถูกเก็บในประวัติแชท
     คิดเยอะรอนานได้ แต่ไม่ทำให้หน้าต่างเต็มเร็วขึ้น</p>
     <div class="presets" id="w-controls">
-      <button data-act="send">ส่งข้อความ</button>
+      <button type="button" data-act="send" class="play-btn"></button>
+      <button type="button" data-act="next"></button>
       <button data-act="turn10">+ เพิ่ม 10 รอบสนทนา</button>
       <button data-act="reset">รีเซ็ต</button>
     </div>
@@ -1037,9 +1129,9 @@ function initWindow(root) {
 
   // Single source of truth for "attachments as packContext sees them" — the
   // paste box's live token count folds in as one more attachment exactly
-  // like a clicked-in file would. Both updateBar() below and sendTurn() read
-  // this so the bar and the beat-by-beat send animation can never disagree
-  // about what's competing for space.
+  // like a clicked-in file would. Both updateBar() below and buildSendSteps()
+  // read this so the bar and the beat-by-beat send animation can never
+  // disagree about what's competing for space.
   function currentAttachments() {
     return state.pasted ? [...state.attachments, state.pasted] : state.attachments;
   }
@@ -1058,94 +1150,79 @@ function initWindow(root) {
     for (let i = 0; i < 10; i++) addTurn();
     render();
   };
+  const sendBtn = controls.querySelector('[data-act="send"]');
+  const nextBtn = controls.querySelector('[data-act="next"]');
+  // Visual-only beat cue shown next to the bar while a send animates; kept
+  // aria-hidden since #w-summary (via createStepper's announce/render) is
+  // this demo's real aria-live region.
+  const turnStatus = root.querySelector('#w-turn-status');
+  const summaryEl = root.querySelector('#w-summary');
+
+  // The four beats from the top of this file. Rebuilt fresh every cycle
+  // since TURN_SHAPES cycles by state.turns.length. Beats 1-3 call
+  // updateBar() directly, not render(), so #w-summary stays on the last
+  // settled state until beat 4 pushes the real total and calls render()
+  // itself — why beat 4's announce() just defers to that.
+  function buildSendSteps() {
+    const shape = TURN_SHAPES[state.turns.length % TURN_SHAPES.length];
+    const BEAT_MS = 550; // within the 400-700ms/beat pacing target
+    return [
+      {
+        apply() {
+          updateBar([...state.turns, shape.question], 0);
+          turnStatus.textContent = `ส่งคำถาม (${shape.question.toLocaleString()} โทเค็น)`;
+        },
+        announce: () => `ส่งคำถามแล้ว ใช้ไป ${shape.question.toLocaleString()} โทเค็น`,
+        playDelay: 0
+      },
+      {
+        apply() {
+          updateBar([...state.turns, shape.question], shape.thinking);
+          turnStatus.textContent = `กำลังคิด… (${shape.thinking.toLocaleString()} โทเค็น)`;
+        },
+        announce: () => `กำลังคิด ใช้พื้นที่ชั่วคราวเพิ่มอีก ${shape.thinking.toLocaleString()} โทเค็น`,
+        playDelay: BEAT_MS
+      },
+      {
+        apply() {
+          updateBar([...state.turns, shape.question + shape.answer], shape.thinking);
+          turnStatus.textContent = `ได้คำตอบ (${shape.answer.toLocaleString()} โทเค็น)`;
+        },
+        announce: () => `ได้คำตอบแล้ว ใช้ไปอีก ${shape.answer.toLocaleString()} โทเค็น`,
+        playDelay: BEAT_MS
+      },
+      {
+        apply() {
+          turnStatus.textContent = '';
+          state.turns.push(shape.question + shape.answer);
+          render(); // writes #w-summary's settled description itself
+        },
+        playDelay: BEAT_MS
+      }
+    ];
+  }
+
+  const sendStepper = createStepper({
+    getSteps: buildSendSteps,
+    playBtn: sendBtn,
+    nextBtn,
+    liveEl: summaryEl,
+    playLabels: PLAY_LABELS,
+    nextLabel: NEXT_LABEL,
+    initialIndex: -1 // nothing has been sent yet — no "settled" send to rest on
+  });
+
   controls.querySelector('[data-act="reset"]').onclick = () => {
     // A reset mid-send must not let that send's queued timers land afterward
-    // and silently resurrect a turn the user just cleared — see sendTurn()'s
-    // sendRunToken for the other half of this guard.
-    sendRunToken++;
-    setSendState('idle');
+    // and silently resurrect a turn the user just cleared.
+    sendStepper.cancelPlay();
+    sendStepper.forceIdle(-1);
     turnStatus.textContent = '';
     state.attachments = []; state.turns = []; state.pasted = 0;
     root.querySelector('#w-paste').value = '';
     root.querySelector('#w-trunc').style.display = 'none';
     render();
   };
-
-  const sendBtn = controls.querySelector('[data-act="send"]');
-  // Visual-only beat cue ("ส่งคำถาม (140 โทเค็น)" → "กำลังคิด… (380 โทเค็น)" →
-  // "ได้คำตอบ (500 โทเค็น)") shown next to the bar while a send animates.
-  // aria-hidden because it narrates *transient* states — mid-turn thinking
-  // that is about to vanish is not something worth a screen reader user
-  // catching mid-flight and later having to unlearn. See the comment on
-  // sendTurn() for why #w-summary itself only ever announces the settled
-  // result instead of following it beat-by-beat.
-  const turnStatus = root.querySelector('#w-turn-status');
-  let sendRunToken = 0;
-  function setSendState(mode) {
-    sendBtn.disabled = mode === 'sending';
-    sendBtn.textContent = mode === 'sending' ? 'กำลังส่ง…' : 'ส่งข้อความ';
-  }
-  // Plays one realistic exchange as four beats instead of silently appending
-  // a number: (1) the question lands in history, (2) "กำลังคิด" inflates —
-  // carved out of the reply reserve rather than added on top of it, because
-  // real extended-thinking tokens count against the same output budget as
-  // the reply itself, so this isn't a simplification invented for the demo,
-  // it's the actual accounting — (3) the answer appears, then (4) thinking
-  // deflates back to nothing and only question+answer remain, permanently,
-  // in history. That last beat is the whole point: thinking cost real space
-  // *during* the turn without adding a single token to what gets resent on
-  // the next one — see the "โทเค็นคิดใช้พื้นที่…" sentence above the controls.
-  //
-  // Beats 1-3 call updateBar() directly rather than render(), so #w-summary
-  // and the turn-chip list stay on the last *settled* description the whole
-  // time a send is animating — accurate live-region behavior means never
-  // announcing a state that is about to be reversed. Only the final beat
-  // (via finalize()) pushes the real total onto state.turns and calls the
-  // authoritative render(), the same path every other control on this page
-  // already uses, so the settled announcement, the segment aria-labels, and
-  // the new turn chip all update together, once, correctly.
-  function sendTurn() {
-    const shape = TURN_SHAPES[state.turns.length % TURN_SHAPES.length];
-    const myRun = ++sendRunToken;
-    const finalize = () => {
-      state.turns.push(shape.question + shape.answer);
-      render();
-    };
-    if (REDUCE_MOTION) {
-      finalize();
-      return;
-    }
-    setSendState('sending');
-    const BEAT_MS = 550; // within the 400-700ms/beat pacing target
-    const beats = [
-      { hist: shape.question, think: 0,
-        status: `ส่งคำถาม (${shape.question.toLocaleString()} โทเค็น)` },
-      { hist: shape.question, think: shape.thinking,
-        status: `กำลังคิด… (${shape.thinking.toLocaleString()} โทเค็น)` },
-      { hist: shape.question + shape.answer, think: shape.thinking,
-        status: `ได้คำตอบ (${shape.answer.toLocaleString()} โทเค็น)` }
-    ];
-    let i = 0;
-    const step = () => {
-      if (myRun !== sendRunToken) return; // superseded by reset or another send
-      const beat = beats[i];
-      updateBar([...state.turns, beat.hist], beat.think);
-      turnStatus.textContent = beat.status;
-      i++;
-      if (i < beats.length) {
-        setTimeout(step, BEAT_MS);
-      } else {
-        setTimeout(() => {
-          if (myRun !== sendRunToken) return;
-          turnStatus.textContent = '';
-          setSendState('idle');
-          finalize(); // beat 4: thinking vanishes, question+answer settle in
-        }, BEAT_MS);
-      }
-    };
-    step();
-  }
-  sendBtn.onclick = sendTurn;
 
   // Bar segments carry their label + exact count in aria-label (and title,
   // for mouse hover) and are individually focusable — only 6 of them, so
@@ -1186,8 +1263,8 @@ function initWindow(root) {
   // Computes packContext's result for a given (possibly not-yet-committed)
   // `turnsForDisplay` and draws it onto #w-bar via the shared
   // renderContextBar(). `thinkingTokens` is carved out of the reply reserve
-  // rather than added to total demand — see sendTurn()'s comment for why
-  // that's the accurate accounting, not a simplification.
+  // rather than added to total demand — see buildSendSteps()'s comment for
+  // why that's the accurate accounting, not a simplification.
   function updateBar(turnsForDisplay, thinkingTokens) {
     const r = packContext({
       windowTokens: CONFIG.windowTokens,
@@ -1325,7 +1402,6 @@ function growWithoutOverflow(turns, attachments, maxTurns) {
 }
 const COMPACT_CONTINUED = growWithoutOverflow(COMPACT_SCRIPT.pseudoTurns, [], COMPACT_CONTINUE_MAX);
 
-const COMPACT_LABELS = { idle: '▶ เล่นทีละขั้น', running: 'กำลังเล่น…', done: '↺ เล่นซ้ำ' };
 
 // Demo 2.1: what happens the moment the window in demo 2 actually fills up.
 // Plays a fixed five-beat story — accumulate, hit the ceiling, "read back"
@@ -1352,7 +1428,10 @@ function initCompaction(root) {
   root.innerHTML = `
     <p>บทสนทนาสะสมไปเรื่อย ๆ จนหน้าต่างเต็ม เอเจนต์ (agent) หลายตัวไม่ได้หยุดตรงนั้น — มันสรุปย่อรอบเก่าที่สุดให้เหลือ
     ก้อนเล็ก ๆ ก้อนเดียว แล้วคุยต่อในพื้นที่ที่เพิ่งว่างขึ้น กดเล่นเพื่อดูขั้นตอนทั้งหมด</p>
-    <div class="presets" id="c-controls"><button type="button" id="c-play" class="play-btn">${COMPACT_LABELS.idle}</button></div>
+    <div class="presets" id="c-controls">
+      <button type="button" id="c-play" class="play-btn"></button>
+      <button type="button" id="c-next"></button>
+    </div>
     <div class="bar" id="c-bar"></div>
     <p class="muted" id="c-status" aria-hidden="true"></p>
     <div class="stats">
@@ -1372,6 +1451,7 @@ function initCompaction(root) {
   const afterEl = root.querySelector('#c-after');
   const liveEl = root.querySelector('#c-live');
   const playBtn = root.querySelector('#c-play');
+  const nextBtn = root.querySelector('#c-next');
 
   function updateBar(turnsForDisplay) {
     const r = packContext({
@@ -1385,90 +1465,75 @@ function initCompaction(root) {
     return r;
   }
 
-  // The true, complete end state — same numbers whether reached by scrolling
-  // past a never-clicked Play button or by watching the full play sequence.
+  // The true, complete end state, and also step 5 below — so rest and the
+  // end of the play sequence can never draw differently.
   function showFinal() {
     updateBar(COMPACT_CONTINUED);
     beforeEl.textContent = beforeStr;
     afterEl.textContent = afterStr;
     status.textContent = 'คุยต่อในพื้นที่ที่ว่างขึ้นแล้ว';
   }
-  // Announces the settled outcome once — not every animation frame (see
-  // sendTurn()'s own comment in initWindow() for the same reasoning: a
-  // screen reader user shouldn't have to catch, and later unlearn, a
-  // mid-flight number that's about to change again).
-  function announceSettled() {
-    liveEl.textContent = `สรุปย่อ ${info.count.toLocaleString()} รอบเก่า จาก ${beforeStr} เหลือ ${afterStr} โทเค็น ` +
-      `แล้วคุยต่อได้อีก ${addedTurns} รอบในพื้นที่ที่เพิ่งว่างขึ้น`;
-  }
+  const settledText = () => `สรุปย่อ ${info.count.toLocaleString()} รอบเก่า จาก ${beforeStr} เหลือ ${afterStr} โทเค็น ` +
+    `แล้วคุยต่อได้อีก ${addedTurns} รอบในพื้นที่ที่เพิ่งว่างขึ้น`;
 
   showFinal();
 
-  let runToken = 0; // invalidates a stale timer chain if Play is pressed again mid-run
-  const setState = (s) => {
-    playBtn.disabled = s === 'playing';
-    playBtn.textContent = s === 'playing' ? COMPACT_LABELS.running : s === 'done' ? COMPACT_LABELS.done : COMPACT_LABELS.idle;
-  };
-
-  playBtn.addEventListener('click', () => {
-    const myRun = ++runToken;
-    if (REDUCE_MOTION) {
-      showFinal();
-      announceSettled();
-      setState('done');
-      return;
-    }
-    setState('playing');
-    beforeEl.textContent = '0';
-    afterEl.textContent = '0';
-    liveEl.textContent = '';
-    updateBar([]);
-    status.textContent = 'กำลังสะสมบทสนทนา…';
-
-    const FILL_STEPS = 10;
-    const FILL_STEP_MS = 110; // ~1.1s to montage through the whole build-up — "faster than real time"
-    const CEILING_PAUSE_MS = 500;
-    const THINKING_MS = 650;
-    const COLLAPSE_MS = 700;
-    const CONTINUE_MS = 500;
-
-    let i = 0;
-    const fillStep = () => {
-      if (myRun !== runToken) return; // superseded by a newer press
-      i++;
-      const idx = Math.round((i / FILL_STEPS) * COMPACT_RAW_TURNS.length);
-      updateBar(COMPACT_RAW_TURNS.slice(0, idx));
-      if (i < FILL_STEPS) {
-        setTimeout(fillStep, FILL_STEP_MS);
-      } else {
-        status.textContent = 'หน้าต่างเต็มแล้ว';
-        setTimeout(thinkingBeat, CEILING_PAUSE_MS);
+  // Five beats — accumulate, hit the ceiling, "กำลังสรุปย่อ", collapse into
+  // one recap, continue into freed room. The old 10-frame fill montage is
+  // gone: apply() jumps straight to each step's real state and lets the
+  // bar's own `.seg { transition: width }` animate it, for auto-play and a
+  // manual Next alike.
+  function buildSteps() {
+    // Steps 1-3 share the same still-full bar; only the status text differs.
+    const stillFull = (statusText) => () => {
+      updateBar(COMPACT_RAW_TURNS);
+      beforeEl.textContent = '0';
+      afterEl.textContent = '0';
+      status.textContent = statusText;
+    };
+    return [
+      {
+        apply: stillFull('กำลังสะสมบทสนทนา…'),
+        announce: () => `บทสนทนาสะสมไปเรื่อย ๆ จนใกล้เต็มหน้าต่าง ${CONFIG.windowTokens.toLocaleString()} โทเค็น`,
+        playDelay: 150
+      },
+      {
+        apply: stillFull('หน้าต่างเต็มแล้ว'),
+        announce: () => 'หน้าต่างเต็มแล้ว ไม่เหลือที่ว่างให้คุยต่อ',
+        playDelay: 600
+      },
+      {
+        apply: stillFull('กำลังสรุปย่อ…'),
+        announce: () => 'กำลังสรุปย่อรอบเก่าที่สุดให้เหลือก้อนเดียว',
+        playDelay: 650
+      },
+      {
+        apply() {
+          updateBar(COMPACT_SCRIPT.pseudoTurns); // the watchable shrink: seg-hist collapses to the recap + kept turns
+          beforeEl.textContent = beforeStr;
+          afterEl.textContent = afterStr;
+          status.textContent = 'สรุปย่อรอบเก่าเป็นก้อนเดียวแล้ว';
+        },
+        announce: () => `สรุปย่อ ${info.count.toLocaleString()} รอบเก่า จาก ${beforeStr} เหลือ ${afterStr} โทเค็น`,
+        playDelay: 700
+      },
+      {
+        apply: showFinal,
+        announce: settledText,
+        playAnnounce: settledText,
+        playDelay: 500
       }
-    };
-    const thinkingBeat = () => {
-      if (myRun !== runToken) return;
-      status.textContent = 'กำลังสรุปย่อ…';
-      setTimeout(collapseBeat, THINKING_MS);
-    };
-    const collapseBeat = () => {
-      if (myRun !== runToken) return;
-      updateBar(COMPACT_SCRIPT.pseudoTurns); // the watchable shrink: seg-hist collapses to the recap + kept turns
-      beforeEl.textContent = beforeStr;
-      afterEl.textContent = afterStr;
-      status.textContent = 'สรุปย่อรอบเก่าเป็นก้อนเดียวแล้ว';
-      setTimeout(continueBeat, COLLAPSE_MS);
-    };
-    const continueBeat = () => {
-      if (myRun !== runToken) return;
-      updateBar(COMPACT_CONTINUED);
-      status.textContent = 'คุยต่อในพื้นที่ที่ว่างขึ้นแล้ว';
-      setTimeout(() => {
-        if (myRun !== runToken) return;
-        announceSettled();
-        setState('done');
-      }, CONTINUE_MS);
-    };
-    setTimeout(fillStep, FILL_STEP_MS);
+    ];
+  }
+
+  createStepper({
+    getSteps: buildSteps,
+    playBtn,
+    nextBtn,
+    liveEl,
+    playLabels: PLAY_LABELS,
+    nextLabel: NEXT_LABEL,
+    initialIndex: 4 // rest already shows the complete result
   });
 }
 
@@ -1477,10 +1542,7 @@ function initCompaction(root) {
 // literal below) so a Thai pass can find and replace them without hunting
 // through markup or animation logic.
 const BURN_LABELS = {
-  taskGroups: ['งานที่ 1', 'งานที่ 2', 'งานที่ 3'],
-  playIdle: '▶ เล่นทีละรอบ',
-  playRunning: 'กำลังเล่น…',
-  playDone: '↺ เล่นซ้ำ'
+  taskGroups: ['งานที่ 1', 'งานที่ 2', 'งานที่ 3']
 };
 
 function initBurn(root) {
@@ -1508,7 +1570,8 @@ function initBurn(root) {
     <p>ทุกครั้งที่กดส่งข้อความ โมเดลจะอ่านบทสนทนาทั้งหมดซ้ำอีกครั้ง รอบที่ 20 จึงไม่เท่ากับรอบที่ 1 —
     เพราะมันแบกรอบก่อนหน้าทั้งสิบเก้ารอบไว้ด้วย งานสามอย่างเหมือนกัน ยี่สิบรอบเท่ากัน ต่างกันแค่วิธีจัดแชท</p>
     <div class="presets" id="b-controls">
-      <button type="button" id="b-play" class="play-btn">${BURN_LABELS.playIdle}</button>
+      <button type="button" id="b-play" class="play-btn"></button>
+      <button type="button" id="b-next"></button>
     </div>
     <p class="sr-only" id="b-live" aria-live="polite" aria-atomic="true"></p>
     <div class="split2">
@@ -1624,93 +1687,62 @@ function initBurn(root) {
   };
   const longCols = draw('#b-long', long, '', 'แชทยาวเส้นเดียว');
   const splitCols = draw('#b-split', split, 'alt', 'แยกแชททุก 7 รอบ');
+  // armGrowIn's ~20ms per-column entrance stagger only suits its one-time
+  // reveal-on-scroll; the turn-by-turn step below re-toggles .in itself on
+  // every press, and would otherwise replay that stagger each time.
+  for (const col of [...longCols, ...splitCols]) col.style.transitionDelay = '0ms';
 
-  // Play control: both charts are fully drawn at rest (armGrowIn's own
-  // reveal already handles that on scroll-in) — an attendee who never
-  // touches Play still sees the true, complete comparison, and totals
-  // already read 169,000 / 70,580. Play re-plays that same true state as a
-  // turn-by-turn story: it hides every column, then reveals turn 1 on both
-  // sides, then turn 2, and so on, so the growing gap between the two
-  // totals builds in front of you instead of arriving pre-drawn.
-  //
-  // Reuses armGrowIn's own .grow/.in pair rather than inventing a second
-  // set of motion classes: .grow (already permanently on every column) is
-  // "hidden", .grow.in is "shown", exactly as it is for the entrance
-  // reveal, so there is nothing new for that reveal-on-scroll to fight
-  // with — removing .in re-hides a column, re-adding it reveals it, and if
-  // armGrowIn's own fallback/observer later (re-)adds .in that is a no-op.
-  // The per-column transitionDelay armGrowIn set for its ~20ms entrance
-  // micro-stagger is zeroed before a play run so pacing is driven only by
-  // this function's own per-turn timer, not doubled up with that stagger.
+  // Both charts are fully drawn at rest (armGrowIn already handles that on
+  // scroll-in) — totals already read 169,000 / 70,580. Auto-play and Next
+  // both re-play that same true state turn by turn, reusing armGrowIn's own
+  // .grow/.in pair (removing .in re-hides a column, re-adding reveals it)
+  // rather than inventing a second set of motion classes.
   const playBtn = root.querySelector('#b-play');
+  const nextBtn = root.querySelector('#b-next');
   const longTotalEl = root.querySelector('#b-long-total');
   const splitTotalEl = root.querySelector('#b-split-total');
   const liveEl = root.querySelector('#b-live');
   const STEP_MS = 160; // ~3.2s for all 20 turns — within the 120-200ms/turn, 3-4s total target
 
-  // Playback fires every STEP_MS for TURNS steps — announcing all 20 would
-  // be unusable spam, so this only speaks at the first step, every 5th
-  // step, and the final step: 5 announcements spread across the ~3.2s run
-  // instead of 20. The totals themselves still visibly update every step
-  // for sighted users; only the screen-reader channel is throttled.
-  const announceBurn = (i, done) => {
-    liveEl.textContent = done
-      ? `เล่นจบแล้ว แชทยาวเส้นเดียวประมวลผลรวม ${longTotalStr} โทเค็น ถ้าแยกแชททุก 7 รอบรวม ${splitTotalStr} โทเค็น`
-      : `รอบที่ ${i + 1} จาก ${TURNS}: แชทยาวเส้นเดียวสะสม ${long[i].cumulative.toLocaleString()} โทเค็น ` +
-        `ถ้าแยกแชทสะสม ${split[i].cumulative.toLocaleString()} โทเค็น`;
-  };
+  // Shared by announce() (every step, manual) and the throttled subset that
+  // also use it as playAnnounce() (auto-play: first, every 5th, final only).
+  const announceBurn = (i, done) => done
+    ? `เล่นจบแล้ว แชทยาวเส้นเดียวประมวลผลรวม ${longTotalStr} โทเค็น ถ้าแยกแชททุก 7 รอบรวม ${splitTotalStr} โทเค็น`
+    : `รอบที่ ${i + 1} จาก ${TURNS}: แชทยาวเส้นเดียวสะสม ${long[i].cumulative.toLocaleString()} โทเค็น ` +
+      `ถ้าแยกแชทสะสม ${split[i].cumulative.toLocaleString()} โทเค็น`;
 
-  let runToken = 0; // invalidates a stale timer chain if play is pressed again mid-run
-  const setState = (state) => {
-    playBtn.disabled = state === 'playing';
-    playBtn.textContent = state === 'playing' ? BURN_LABELS.playRunning
-      : state === 'done' ? BURN_LABELS.playDone
-      : BURN_LABELS.playIdle;
-  };
-  const showFinal = () => {
-    for (const col of longCols) col.classList.add('in');
-    for (const col of splitCols) col.classList.add('in');
-    longTotalEl.textContent = longTotalStr;
-    splitTotalEl.textContent = splitTotalStr;
-    announceBurn(TURNS - 1, true);
-  };
+  // A pure function of `i`, not incremental, so any jump lands correctly.
+  function revealThrough(i) {
+    for (let k = 0; k < TURNS; k++) {
+      const on = k <= i;
+      longCols[k].classList.toggle('in', on);
+      splitCols[k].classList.toggle('in', on);
+    }
+    longTotalEl.textContent = long[i].cumulative.toLocaleString();
+    splitTotalEl.textContent = split[i].cumulative.toLocaleString();
+  }
 
-  playBtn.addEventListener('click', () => {
-    const myRun = ++runToken;
-    if (REDUCE_MOTION) {
-      // Jump straight to the final state — no per-turn reveal, no counting
-      // animation on the totals either.
-      showFinal();
-      setState('done');
-      return;
-    }
-    setState('playing');
-    for (const col of [...longCols, ...splitCols]) {
-      col.style.transitionDelay = '0ms';
-      col.classList.remove('in');
-    }
-    longTotalEl.textContent = '0';
-    splitTotalEl.textContent = '0';
-    let i = 0;
-    const step = () => {
-      if (myRun !== runToken) return; // superseded by a newer press
-      longCols[i].classList.add('in');
-      splitCols[i].classList.add('in');
-      longTotalEl.textContent = long[i].cumulative.toLocaleString();
-      splitTotalEl.textContent = split[i].cumulative.toLocaleString();
-      // i === TURNS - 1 is listed explicitly (not just relied on via the
-      // %5 throttle, which only lines up with the last turn because 20 is
-      // a multiple of 5) so the final announcement always lands even if
-      // that stops being a coincidence later. Interrupting a run (pressing
-      // Play again) still only lets its own final step announce if it runs
-      // to completion — see runToken above — but whichever run *does* run
-      // to completion always gets its "done" announcement.
-      if (i === 0 || (i + 1) % 5 === 0 || i === TURNS - 1) announceBurn(i, i === TURNS - 1);
-      i++;
-      if (i < TURNS) setTimeout(step, STEP_MS);
-      else setState('done');
-    };
-    step();
+  function buildSteps() {
+    return Array.from({ length: TURNS }, (_, i) => {
+      const done = i === TURNS - 1;
+      const throttled = i === 0 || (i + 1) % 5 === 0 || done;
+      return {
+        apply: () => revealThrough(i),
+        announce: () => announceBurn(i, done),
+        playAnnounce: throttled ? () => announceBurn(i, done) : null,
+        playDelay: i === 0 ? 0 : STEP_MS // turn 1 lands immediately, as before
+      };
+    });
+  }
+
+  createStepper({
+    getSteps: buildSteps,
+    playBtn,
+    nextBtn,
+    liveEl,
+    playLabels: PLAY_LABELS,
+    nextLabel: NEXT_LABEL_TURNS,
+    initialIndex: TURNS - 1 // rest already shows every turn revealed
   });
 }
 const LITERATURE_CURVE = {
@@ -1965,7 +1997,6 @@ if (typeof IntersectionObserver === 'function') {
 // got to", labelled ราว on screen rather than presented as measured.
 const HANDOFF_OLD_HISTORY = sum(COMPACT_RAW_TURNS);
 const HANDOFF_KEEP = 900;
-const HANDOFF_LABELS = { idle: '▶ เล่นทีละขั้น', running: 'กำลังเล่น…', done: '↺ เล่นซ้ำ' };
 
 function initHandoff(root) {
   const free = CONFIG.windowTokens - CONFIG.systemPromptTokens - HANDOFF_OLD_HISTORY;
@@ -1977,7 +2008,10 @@ function initHandoff(root) {
     หรือบอกงานให้เพื่อนร่วมทีมก่อนลาพักร้อน — เล่าเท่าที่จำเป็น ไม่ต้องเล่าใหม่ทั้งหมด</p>
     <p>ในที่นี้คือส่งต่อจากแชทเดิมที่เต็มแล้ว ไปแชทใหม่ที่ยังว่าง เปิดแชทใหม่ไม่ได้แปลว่าต้องเริ่มจากศูนย์ —
     คุณเลือกเองได้ว่าจะให้อะไรตามไปด้วย</p>
-    <div class="presets"><button type="button" id="ho-play" class="play-btn">${HANDOFF_LABELS.idle}</button></div>
+    <div class="presets">
+      <button type="button" id="ho-play" class="play-btn"></button>
+      <button type="button" id="ho-next"></button>
+    </div>
     <div class="ho-pair">
       <div><h3>แชทเดิม</h3><div class="bar" id="ho-old"></div></div>
       <div class="ho-arrow" id="ho-arrow" aria-hidden="true">→</div>
@@ -1999,6 +2033,7 @@ function initHandoff(root) {
   const oldLabel = root.querySelector('#ho-old-label');
   const newLabel = root.querySelector('#ho-new-label');
   const playBtn = root.querySelector('#ho-play');
+  const nextBtn = root.querySelector('#ho-next');
 
   // Segments are drawn directly rather than through renderContextBar(): this
   // slide needs a dimmed "left behind" state and a carried-across block,
@@ -2035,55 +2070,58 @@ function initHandoff(root) {
     statusEl.textContent = 'แชทใหม่เริ่มด้วยเรื่องที่ค้างไว้ และเหลือที่ว่างให้ทำงานต่อเกือบเต็มหน้าต่าง';
   }
 
-  function announceSettled() {
-    liveEl.textContent = `ส่งต่อไปแชทใหม่แล้ว แชทเดิมใช้ไป ${oldUsed} โทเค็น ` +
-      `แชทใหม่เริ่มด้วยราว ${newUsed} โทเค็น เหลือที่ว่างเกือบเต็มหน้าต่าง`;
-  }
+  const settledText = () => `ส่งต่อไปแชทใหม่แล้ว แชทเดิมใช้ไป ${oldUsed} โทเค็น ` +
+    `แชทใหม่เริ่มด้วยราว ${newUsed} โทเค็น เหลือที่ว่างเกือบเต็มหน้าต่าง`;
 
   showFinal();
 
-  let runToken = 0;
-  const setState = (s) => {
-    playBtn.disabled = s === 'playing';
-    playBtn.textContent = s === 'playing' ? HANDOFF_LABELS.running : s === 'done' ? HANDOFF_LABELS.done : HANDOFF_LABELS.idle;
-  };
+  // Three beats: old chat full, chosen slice lights up as the rest dims,
+  // block crosses over. The old "arrow on" beat merges into that last one
+  // (only 3 steps wanted here) — .seg's width transition still carries it.
+  function buildSteps() {
+    return [
+      {
+        apply() {
+          arrow.classList.remove('on');
+          draw(oldBar, oldFull(false));
+          draw(newBar, [['seg-free', CONFIG.windowTokens, '', false]]);
+          oldLabel.textContent = `ใช้ไป ${oldUsed} จาก ${CONFIG.windowTokens.toLocaleString()}`;
+          newLabel.textContent = 'ยังไม่ได้เริ่ม';
+          statusEl.textContent = 'แชทเดิมเต็มแล้ว ไม่เหลือที่ให้คุยต่อ';
+        },
+        announce: () => `แชทเดิมเต็มแล้ว ใช้ไป ${oldUsed} โทเค็น ไม่เหลือที่ให้คุยต่อ`,
+        playDelay: 0
+      },
+      {
+        apply() {
+          draw(oldBar, [
+            ['seg-sys', CONFIG.systemPromptTokens, 'คำสั่งระบบ', true],
+            ['seg-hist', HANDOFF_OLD_HISTORY - HANDOFF_KEEP, 'ปล่อยทิ้ง', true],
+            ['seg-keep', HANDOFF_KEEP, '', false],
+            ['seg-free', free, '', false]
+          ]);
+          statusEl.textContent = 'เลือกเฉพาะสิ่งที่ต้องใช้ต่อ — เป้าหมาย ข้อสรุป ข้อจำกัด ขั้นต่อไป';
+        },
+        announce: () => `เลือกส่วนที่ต้องใช้ต่อแล้ว ราว ${HANDOFF_KEEP.toLocaleString()} โทเค็น ส่วนที่เหลือถูกปล่อยทิ้งไว้`,
+        playDelay: 900
+      },
+      {
+        apply: showFinal,
+        announce: settledText,
+        playAnnounce: settledText,
+        playDelay: 2100
+      }
+    ];
+  }
 
-  playBtn.addEventListener('click', () => {
-    const myRun = ++runToken;
-    if (REDUCE_MOTION) { showFinal(); announceSettled(); setState('done'); return; }
-
-    setState('playing');
-    arrow.classList.remove('on');
-    draw(oldBar, oldFull(false));
-    draw(newBar, [['seg-free', CONFIG.windowTokens, '', false]]);
-    oldLabel.textContent = `ใช้ไป ${oldUsed} จาก ${CONFIG.windowTokens.toLocaleString()}`;
-    newLabel.textContent = 'ยังไม่ได้เริ่ม';
-    statusEl.textContent = 'แชทเดิมเต็มแล้ว ไม่เหลือที่ให้คุยต่อ';
-    liveEl.textContent = '';
-
-    setTimeout(() => {
-      if (myRun !== runToken) return;
-      draw(oldBar, [
-        ['seg-sys', CONFIG.systemPromptTokens, 'คำสั่งระบบ', true],
-        ['seg-hist', HANDOFF_OLD_HISTORY - HANDOFF_KEEP, 'ปล่อยทิ้ง', true],
-        ['seg-keep', HANDOFF_KEEP, '', false],
-        ['seg-free', free, '', false]
-      ]);
-      statusEl.textContent = 'เลือกเฉพาะสิ่งที่ต้องใช้ต่อ — เป้าหมาย ข้อสรุป ข้อจำกัด ขั้นต่อไป';
-    }, 900);
-
-    setTimeout(() => {
-      if (myRun !== runToken) return;
-      arrow.classList.add('on');
-      statusEl.textContent = 'ย่อให้เหลือก้อนเล็ก ๆ ก้อนเดียว แล้วส่งไปแชทใหม่';
-    }, 2000);
-
-    setTimeout(() => {
-      if (myRun !== runToken) return;
-      showFinal();
-      announceSettled();
-      setState('done');
-    }, 3000);
+  createStepper({
+    getSteps: buildSteps,
+    playBtn,
+    nextBtn,
+    liveEl,
+    playLabels: PLAY_LABELS,
+    nextLabel: NEXT_LABEL,
+    initialIndex: 2 // rest already shows the complete result
   });
 }
 
