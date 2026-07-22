@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import Anthropic from '@anthropic-ai/sdk';
 
-const HTML_PATH = new URL('../context-and-tokens.html', import.meta.url);
+const HTML_PATH = new URL('../index.html', import.meta.url);
 const MODEL = 'claude-opus-4-8';
 const DEPTHS = [0.1, 0.5, 0.9];
 const NEEDLE = 'The access code for the Rotterdam warehouse is PELICAN-4471.';
@@ -45,7 +45,7 @@ const payload = {
 
 function replaceOrThrow(html, pattern, replacement, markerName) {
   if (!pattern.test(html)) {
-    throw new Error(`injection failed: marker ${markerName} not found in context-and-tokens.html`);
+    throw new Error(`injection failed: marker ${markerName} not found in index.html`);
   }
   return html.replace(pattern, replacement);
 }

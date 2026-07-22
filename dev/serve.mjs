@@ -9,7 +9,7 @@ const PORT = Number(process.env.PORT || 8123);
 const TYPES = { '.html': 'text/html; charset=utf-8', '.md': 'text/plain; charset=utf-8' };
 
 createServer(async (req, res) => {
-  const path = decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '') || 'context-and-tokens.html';
+  const path = decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '') || 'index.html';
   if (path.includes('..')) {
     res.writeHead(400).end('bad path');
     return;
@@ -21,5 +21,5 @@ createServer(async (req, res) => {
     res.writeHead(404).end('not found');
   }
 }).listen(PORT, () => {
-  console.log(`serving on http://localhost:${PORT}/context-and-tokens.html`);
+  console.log(`serving on http://localhost:${PORT}/index.html`);
 });

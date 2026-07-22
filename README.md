@@ -6,7 +6,7 @@ context window actually are — by letting them push the things around rather th
 Built for subscription users of Claude and ChatGPT: PMs, writers, ops staff. No API knowledge
 assumed, nothing to install, no account needed.
 
-**[context-and-tokens.html](context-and-tokens.html)** is the whole thing. One self-contained file,
+**[index.html](index.html)** is the whole thing. One self-contained file,
 about 1 MB, most of which is an embedded BPE vocabulary. Open it from disk or host it anywhere; it
 makes no network calls.
 
@@ -33,13 +33,16 @@ time or let it run.
 
 ## Running it
 
-Just open `context-and-tokens.html` in a browser. That is the supported path, and it works offline.
+Just open `index.html` in a browser. That is the supported path, and it works offline.
 
 For a local URL instead:
 
 ```bash
-npm run serve     # http://localhost:8123/context-and-tokens.html
+npm run serve     # http://localhost:8123
 ```
+
+Hosted on GitHub Pages it sits at the repo root, so the URL you share with a room is just
+`https://braskano1.github.io/context-and-tokens/`.
 
 ## Checking it before a workshop
 
@@ -47,7 +50,7 @@ npm run serve     # http://localhost:8123/context-and-tokens.html
 npm test          # 15 unit tests over the page's own logic
 ```
 
-Then open `context-and-tokens.html?test=1`. A green strip at the bottom reading
+Then open `index.html?test=1`. A green strip at the bottom reading
 `ผ่านทั้งหมด 14 รายการ` means the tokenizer decoded and the demos' arithmetic is sound. A red strip
 names what broke.
 

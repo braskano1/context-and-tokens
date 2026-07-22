@@ -2,7 +2,7 @@
 
 ## The morning of
 
-- [ ] Open `context-and-tokens.html?test=1` on the venue wifi, on the machine you will share the
+- [ ] Open `index.html?test=1` on the venue wifi, on the machine you will share the
       link from. A green strip at the bottom reading `all 13 checks passed` means the page is
       healthy. A red strip names what broke.
 - [ ] Load the hosted URL on a phone as well as a laptop. The page is one 1.0 MB file — it loads

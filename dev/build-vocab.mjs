@@ -4,7 +4,7 @@ import { Tiktoken } from 'js-tiktoken/lite';
 import cl100k from 'js-tiktoken/ranks/cl100k_base';
 
 const RANKS_URL = 'https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken';
-const HTML_PATH = new URL('../context-and-tokens.html', import.meta.url);
+const HTML_PATH = new URL('../index.html', import.meta.url);
 
 const SAMPLES = [
   'hello world',
@@ -30,7 +30,7 @@ const vectors = SAMPLES.map(text => ({ text, ids: enc.encode(text) }));
 
 function replaceOrThrow(html, pattern, replacement, markerName) {
   if (!pattern.test(html)) {
-    throw new Error(`injection failed: marker ${markerName} not found in context-and-tokens.html`);
+    throw new Error(`injection failed: marker ${markerName} not found in index.html`);
   }
   return html.replace(pattern, replacement);
 }
