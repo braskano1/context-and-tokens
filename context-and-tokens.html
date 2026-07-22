@@ -49,7 +49,61 @@
   .presets { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
   button { background:var(--pane); color:var(--fg); border:1px solid var(--line); border-radius:999px; padding:6px 12px; font:inherit; cursor:pointer; }
   button:hover { border-color:var(--accent); }
-  .takeaway { border-left:3px solid var(--accent); padding-left:12px; margin:16px 0; }
+  /* Comfortable reading measure. `main` is capped at 900px, but a line that
+     runs edge to edge there still reaches ~107 characters for this body
+     text — too wide to track by eye, especially read at a glance in a
+     lit room or projected. Scoped to actual prose (paragraphs, list items)
+     rather than narrowing `main` itself, so charts, bars, and the chip
+     grid keep the full width they need. Short lines (stat labels, captions
+     that never reach the cap) are unaffected since max-width only ever
+     clips lines that would otherwise run past it.
+     66ch rather than a stricter classic-editorial 60-65ch: this deck has
+     zero vertical slack at 1280x720 at rest (every slide, not just the
+     flagged slide 2, rendered at exactly its own clientHeight before this
+     fix), so every line a narrower measure pushes from one wrap to two
+     costs a real ~28px with nowhere to absorb it. 66ch measures almost
+     everything at 45-70 real characters/line (see the fix report); a
+     couple of Latin/digit-dense paragraphs (cl100k_base, Anthropic, Liu et
+     al., percentages — narrower glyphs than Thai prose, so more of them
+     fit per line at the same width) land at ~80. Narrowing further to
+     chase those two under the 75 ceiling would add a further wrapped line
+     to several other paragraphs across the deck and break the 1280x720
+     fit — see the snap-mode rhythm retightened below to close the gap
+     this cap alone opened. */
+  .slide p, .slide li { max-width: 66ch; }
+  /* Replaces a side-stripe (border-left + accent) — the single most common
+     AI-generated "callout" tell — with typography plus a spoken-Thai lead-in
+     ("สรุป: ", generated via ::before so it applies uniformly whether the
+     text is static markup or set later via textContent, e.g. #w-takeaway).
+     Modern Chrome/Firefox/Safari + NVDA/JAWS expose ::before text content to
+     the accessibility tree, so a screen reader gets the same "this is the
+     conclusion" framing a sighted reader gets from the colour + weight, not
+     a silent decoration. var(--accent) on var(--bg) measures ~7.5:1, clear
+     of 4.5:1 with margin. No border, no background box — the takeaway is
+     the sentence each demo exists to deliver, so the emphasis lives in the
+     words themselves (size + weight), same measure as every other paragraph
+     around it. */
+  .takeaway { margin:16px 0; font-weight:600; }
+  .takeaway::before { content:"สรุป: "; color:var(--accent); font-weight:700; }
+  /* Closing slide (#s5): the rules gain the same weight/rhythm treatment as
+     a takeaway (see above) via a coloured ::marker on the native <ol> number
+     — plain semantic list, nothing re-implemented — rather than turning
+     empty space into a call-to-action. Each rule also gets a quiet way back
+     to the demo that taught it (an ordinary same-page anchor, not a button),
+     so a self-guided attendee can re-run the example instead of just
+     re-reading the claim. --accent on --bg is the same ~7.5:1 pairing
+     already used on .takeaway and #b-play, so the coloured marker clears
+     4.5:1 too, though a decorative list marker only needs 3:1. */
+  .rules { padding-left:1.3em; }
+  .rules li { margin:16px 0; font-size:17px; line-height:1.6; }
+  .rules li::marker { color:var(--accent); font-weight:700; }
+  .rule-link { display:block; margin-top:2px; font-size:13px; color:var(--muted); text-decoration:none; }
+  .rule-link:hover, .rule-link:focus-visible { color:var(--accent); text-decoration:underline; }
+  /* The page's one closing line — plain statement, not a marketing sign-off,
+     set apart with a full top rule (never a side-stripe) the same way a
+     printed page marks its own end. */
+  .closing-line { margin-top:28px; padding-top:18px; border-top:1px solid var(--line);
+    font-size:17px; font-weight:600; line-height:1.6; }
   .bar { display:flex; height:44px; border:1px solid var(--line); border-radius:8px; overflow:hidden; margin:14px 0; }
   .seg { display:flex; align-items:center; justify-content:center; font-size:12px; overflow:hidden; white-space:nowrap; }
   /* seg-att and seg-hist were darkened from their original #8a5a44 / #4f7942
@@ -135,7 +189,34 @@
   /* Matches .task-group's border-left(1px)+padding-left(6px) below, so each
      label's box lines up with the column group it names. */
   .task-row .task-label + .task-label { padding-left:7px; }
+  /* Demo 3's Play is the deck's one "watch this unfold" control — the two
+     charts are already fully, honestly drawn at rest (see the comment on
+     the click handler below), so an attendee who never notices Play still
+     sees the true comparison, but the effect the button exists to produce
+     (the gap opening up turn by turn) goes unseen unless the button reads
+     as worth pressing. Everywhere else on the page a button is a same-
+     weight pill tag (presets, attachments, mode); Play is the only primary
+     action, so it is the only filled, non-pill button — different silhouette
+     (10px corners, not a 999px pill) and colour, not just bigger. Dark text
+     (--bg literal, matching the button's own filled background family) on
+     --accent measures ~7.5:1, same pairing already verified for .takeaway's
+     lead-in above. */
+  #b-play { background:var(--accent); color:var(--bg); border-color:var(--accent);
+    border-radius:10px; font-weight:700; padding:8px 18px; }
+  #b-play:hover { background:#8fb4ff; border-color:#8fb4ff; }
   #b-play[disabled] { opacity:.6; cursor:default; }
+  /* Demo 1's presets keep no memory of which one produced the current text.
+     aria-pressed is the source of truth (screen readers announce "pressed"/
+     "not pressed" on the button itself, not a colour-only cue), and the
+     attribute selector below is styled straight off it so the visual state
+     can never drift from the accessible one. Border width (not colour alone)
+     plus a leading checkmark carries the "more than colour" signal for
+     sighted users — box-sizing:border-box (set globally) keeps the extra
+     1px of border from nudging the button's own size. Cleared the moment
+     the reader types their own text — see the input handler in
+     initTokenizer(). */
+  #s1 .presets button[aria-pressed="true"] { border-color:var(--accent); border-width:2px; font-weight:700; }
+  #s1 .presets button[aria-pressed="true"]::before { content:"✓ "; }
   /* Motion is layered on top of the rules above, which already describe the
      correct at-rest appearance (full segment widths, full column heights,
      dimmed/struck evicted turns). Nothing in this block may be required for
@@ -209,6 +290,14 @@
        (tried first) silently drops that marker in Chromium. Padding keeps
        list-item layout intact while still growing the row past 44px. */
     summary { min-height:44px; padding:10px 0; box-sizing:border-box; }
+    /* ตัดทิ้ง/สรุปย่อ toggle labels measured 60x25 / 62x25 at 375px — width
+       already clears 44px (the words themselves are that wide), only height
+       was short. min-height + vertical padding grows the tap target without
+       touching the radio/label markup or its native keyboard behaviour;
+       align-items:center (already set on .mode-toggle label) keeps the dot
+       and text centered in the taller box instead of sitting at its top. */
+    .mode-toggle label { min-height:44px; min-width:44px; padding:4px 2px; }
+    .mode-toggle { padding:4px 10px; }
   }
   #more-hint { position:fixed; left:50%; bottom:54px; transform:translateX(-50%); display:none; align-items:center; gap:6px; background:var(--pane); border:1px solid var(--line); border-radius:999px; padding:5px 12px; font-size:12px; color:var(--muted); pointer-events:none; z-index:8; }
   #more-hint.show { display:flex; }
@@ -226,8 +315,8 @@
       box-sizing: border-box;
       scroll-snap-align: start;
       scroll-snap-stop: always;
-      padding-top: 32px;
-      padding-bottom: 40px;
+      padding-top: 12px;
+      padding-bottom: 16px;
     }
     /* Vertical rhythm tightened for the slide deck only — the h2's 2.4em
        top margin, generous paragraph spacing, and fixed 160px chart height
@@ -238,17 +327,34 @@
        two charts (which share one class and one media-query value) and
        demo 4's curve all shrink together, in proportion, at shorter
        screens — relative bar heights within and across charts don't change,
-       only the container's overall scale does. */
-    .slide h2 { margin-top: 0; margin-bottom: .4em; }
+       only the container's overall scale does.
+       Retightened a second time (slide padding 32/40 -> 12/16, plus every
+       margin below shaved a couple more px, .bar/#w-paste/.presets button
+       sized down just here) purely to buy back the height the 66ch prose
+       cap above spends — every slide, not only slide 2, rendered at
+       exactly its own clientHeight before that cap existed, so the cap
+       could not be added without an equal reclaim somewhere. Verified by
+       measuring scrollHeight vs clientHeight for all six slides at
+       1280x720 after every change in this pass (see the fix report); none
+       run over at rest. None of this touches the continuous-scroll/mobile
+       layout below the breakpoint, where the extra height simply scrolls. */
+    .slide h2 { margin-top: 0; margin-bottom: .3em; }
     .slide h3 { margin: .5em 0 .3em; }
-    .slide p { margin: .5em 0; }
-    .slide .takeaway { margin: 10px 0; }
-    .slide .presets { margin: 8px 0; }
-    .slide .chips { margin: 8px 0; }
+    .slide p { margin: .35em 0; }
+    .slide .takeaway { margin: 5px 0; }
+    .slide .presets { margin: 5px 0; }
+    .slide .chips { margin: 5px 0; }
     .slide details { margin: 8px 0; }
-    .slide .mode-toggle { margin: 8px 0; }
-    .slide .mode-note { margin: 4px 0 8px; }
+    .slide .mode-toggle { margin: 5px 0; padding: 2px 10px; }
+    .slide .mode-note { margin: 4px 0 5px; }
+    .slide .presets button { padding: 4px 8px; }
+    .slide .bar { height: 36px; }
+    .slide .turnlist { gap: 4px; }
+    .slide .turn { padding: 3px 7px; }
+    #w-paste { height: 52px; min-height: 52px; padding: 8px; }
     .slide .cols { height: clamp(120px, 20vh, 160px); }
+    .slide .rules li { margin: 10px 0; }
+    .slide .closing-line { margin-top: 16px; padding-top: 12px; }
   }
 </style>
 </head>
@@ -266,12 +372,17 @@
   <section id="s4" class="slide"><div class="slide-inner"><h2>4. จุดที่มันพลาด</h2><div class="mount"></div></div></section>
 
   <section id="s5" class="slide"><div class="slide-inner"><h2>สี่ข้อที่ควรจำ</h2>
-    <ol>
-      <li><b>เปิดแชทใหม่ทุกครั้งที่เปลี่ยนเรื่อง</b> ข้อความเก่า ๆ คือภาระที่โมเดลต้องอ่านซ้ำทุกครั้ง</li>
-      <li><b>ถามคำถามไว้ก่อนเลย</b> คำถามที่ฝังอยู่ลึก ๆ มักได้คำตอบที่แย่กว่า</li>
-      <li><b>แนบไฟล์แค่ครั้งเดียว ตรงจุดที่ต้องใช้</b> เอกสารที่แนบเข้าไปจะค้างอยู่ในหน้าต่างบริบท และถูกอ่านซ้ำทุกครั้งหลังจากนั้น</li>
-      <li><b>สั้นดีกว่ายาว</b> คำสั่งที่กระชับจะเร็วกว่า ถูกกว่า และแม่นยำกว่า</li>
+    <ol class="rules">
+      <li><b>เปิดแชทใหม่ทุกครั้งที่เปลี่ยนเรื่อง</b> ข้อความเก่า ๆ คือภาระที่โมเดลต้องอ่านซ้ำทุกครั้ง
+        <a class="rule-link" href="#s3">ย้อนดูตัวอย่าง ↑</a></li>
+      <li><b>ถามคำถามไว้ก่อนเลย</b> คำถามที่ฝังอยู่ลึก ๆ มักได้คำตอบที่แย่กว่า
+        <a class="rule-link" href="#s4">ย้อนดูตัวอย่าง ↑</a></li>
+      <li><b>แนบไฟล์แค่ครั้งเดียว ตรงจุดที่ต้องใช้</b> เอกสารที่แนบเข้าไปจะค้างอยู่ในหน้าต่างบริบท และถูกอ่านซ้ำทุกครั้งหลังจากนั้น
+        <a class="rule-link" href="#s2">ย้อนดูตัวอย่าง ↑</a></li>
+      <li><b>สั้นดีกว่ายาว</b> คำสั่งที่กระชับจะเร็วกว่า ถูกกว่า และแม่นยำกว่า
+        <a class="rule-link" href="#s1">ย้อนดูตัวอย่าง ↑</a></li>
     </ol>
+    <p class="closing-line">ไม่ได้อยากให้จำคำว่าโทเค็น แค่อยากให้พรุ่งนี้เช้าคุณเริ่มแชทใหม่บ่อยขึ้น</p>
   </div></section>
 </main>
 
@@ -534,6 +645,8 @@ function initTokenizer(root) {
     <div class="presets"></div>
     <textarea id="tk-input">โทเค็นคือหน่วยที่โมเดลใช้อ่านข้อความจริง ๆ</textarea>
     <p class="muted notice-fade" id="tk-trunc" style="display:none">นับแค่ 20,000 ตัวอักษรแรกเท่านั้น ส่วนที่เหลือด้านล่างจะไม่ถูกนับ</p>
+    <p class="muted notice-fade" id="tk-partial" style="display:none">ตัวอักษรไทยหรืออิโมจิมักถูกแบ่งเป็นหลายโทเค็น
+    ชิ้นที่มีกรอบเส้นประจึงมีแค่เศษหนึ่งของมัน แสดงผลลำพังไม่ได้</p>
     <div class="stats">
       <div><b id="tk-tokens">0</b><br><span class="muted">โทเค็น</span></div>
       <div><b id="tk-chars">0</b><br><span class="muted">ตัวอักษร</span></div>
@@ -545,8 +658,6 @@ function initTokenizer(root) {
     <p class="muted sr-only" id="tk-chip-readout" aria-live="polite" aria-atomic="true"></p>
     <p class="muted notice-fade" id="tk-chip-cap" style="display:none">แสดงแค่ ${MAX_CHIPS.toLocaleString()}
     ชิ้นแรกเท่านั้น ตัวเลขจำนวนโทเค็นด้านบนรวมส่วนที่เหลือไว้แล้ว เพียงแต่ไม่ได้วาดให้ดู</p>
-    <p class="muted notice-fade" id="tk-partial" style="display:none">ตัวอักษรไทยหนึ่งตัวมักถูกแบ่งเป็นหลายโทเค็น
-    ชิ้นที่มีกรอบเส้นประด้านบนจึงมีแค่เศษหนึ่งของตัวอักษร แสดงผลลำพังไม่ได้</p>
     <p class="takeaway">คำที่ใช้บ่อยมักถูกนับเป็นโทเค็นเดียว โมเดลจึงไม่ได้เห็นตัวอักษรข้างในจริง ๆ
     นี่คือเหตุผลที่มันนับตัวอักษรผิดบ่อย ๆ ส่วนคำที่ใช้ไม่บ่อยหรือภาษาอื่นจะถูกสับเป็นหลายโทเค็นแทนที่จะเป็นโทเค็นเดียว
     ซึ่งกินพื้นที่ในหน้าต่างบริบทมากกว่าหลายเท่าสำหรับความหมายเดียวกัน (ในตัวอย่างไทยกับอังกฤษด้านบน
@@ -557,11 +668,28 @@ function initTokenizer(root) {
   const liveEl = root.querySelector('#tk-live');
   const chipReadout = root.querySelector('#tk-chip-readout');
 
+  // Which preset (if any) produced the text currently in the box. aria-pressed
+  // is the source of truth — the button's own state, not a colour swatch — so
+  // a screen reader announces "pressed"/"not pressed" the same way a sighted
+  // reader sees the checkmark + heavier border (see the CSS attribute
+  // selector on #s1 .presets button[aria-pressed="true"]). Cleared the moment
+  // the reader edits the text themselves (see the 'input' listener below) —
+  // setting .value programmatically from a preset click does not fire that
+  // event, so clicking a preset never clears its own just-set state.
+  let activePresetBtn = null;
+  function setActivePreset(btn) {
+    if (activePresetBtn) activePresetBtn.setAttribute('aria-pressed', 'false');
+    activePresetBtn = btn || null;
+    if (btn) btn.setAttribute('aria-pressed', 'true');
+  }
+
   const presetBar = root.querySelector('.presets');
   for (const preset of PRESETS) {
     const b = document.createElement('button');
+    b.type = 'button';
     b.textContent = preset.label;
-    b.onclick = () => { input.value = preset.text; render(); };
+    b.setAttribute('aria-pressed', 'false');
+    b.onclick = () => { input.value = preset.text; setActivePreset(b); render(); };
     presetBar.append(b);
   }
 
@@ -667,7 +795,14 @@ function initTokenizer(root) {
   }
 
   let timer;
-  input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(render, 120); });
+  input.addEventListener('input', () => {
+    // A genuine user edit — unlike a preset click, which sets .value
+    // directly and never fires 'input' — so this is the one place that
+    // needs to clear the preset state, immediately rather than on the
+    // render debounce below.
+    setActivePreset(null);
+    clearTimeout(timer); timer = setTimeout(render, 120);
+  });
   render();
 }
 // One "turn" is a user message, the model's thinking, and its reply. Real
