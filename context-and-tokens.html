@@ -143,6 +143,21 @@
      caption, moved to demo 2.1 when compaction got its own slide (see
      initCompaction()). Class name kept as-is; it's purely a styling hook. */
   .mode-note { margin:6px 0 10px; font-size:14px; line-height:1.6; }
+  /* Slide 5 (handoff): two windows side by side with an arrow between them.
+     Its bars reuse .bar/.seg wholesale; only the pairing, the purple "carried
+     across" segment, and the dimming of what gets left behind are new. */
+  .ho-pair { display:grid; grid-template-columns:1fr 34px 1fr; gap:12px; align-items:center; margin:12px 0 4px; }
+  .ho-pair h3 { margin:0 0 6px; font-size:15px; }
+  .ho-arrow { text-align:center; font-size:21px; color:var(--line); transition:color .4s ease; }
+  .ho-arrow.on { color:var(--accent); }
+  .ho-labels { display:flex; justify-content:space-between; font-size:13px; }
+  /* min-width so the carried block stays visible: at ~900 tokens against a
+     200,000-token window it is well under half a percent and would otherwise
+     render as literally zero pixels. The copy states its real size, and its
+     smallness relative to what it replaces is the slide's own point — but a
+     segment you cannot see teaches nothing, so it gets a floor. */
+  .seg-keep { background:#6f5aa0; min-width:5px; }
+  .seg.dim { opacity:.3; }
   /* Paste box is a secondary, exploratory control (unlike the bar/toggle/
      controls above it) — shrinking it from the shared textarea's 120px is
      where slide 2 gives back the height the toggle above costs it. */
@@ -346,6 +361,8 @@
   <section id="s2b" class="slide"><div class="slide-inner"><h2>2.1 พอหน้าต่างเต็ม จะเกิดอะไรขึ้น</h2><div class="mount"></div></div></section>
   <section id="s3" class="slide"><div class="slide-inner"><h2>3. ทำไมยิ่งคุยยิ่งช้าและกินโควตาเร็ว</h2><div class="mount"></div></div></section>
   <section id="s4" class="slide"><div class="slide-inner"><h2>4. จุดที่มันพลาด</h2><div class="mount"></div></div></section>
+
+  <section id="s4b" class="slide"><div class="slide-inner"><h2>5. ส่งต่องาน (handoff) ไปแชทใหม่</h2><div class="mount"></div></div></section>
 
   <section id="s5" class="slide"><div class="slide-inner"><h2>สี่ข้อที่ควรจำ</h2>
     <ol class="rules">
@@ -1937,6 +1954,139 @@ if (typeof IntersectionObserver === 'function') {
 // The observer watches .slide (the scroll-snap target) but animates its
 // .slide-inner child instead — see the CSS comment on .slide-inner.reveal
 // for why the animated element can't be the snap target itself.
+// Slide 5: the handoff. Demo 2.1 shows the model compacting a full chat by
+// itself; this shows the person deciding what survives into a fresh one.
+// Same shrink, different hand on it — and here the abandoned part stays on
+// screen, dimmed, because choosing what to drop is the actual skill.
+//
+// The old chat's history is the same conversation demo 2.1 fills the window
+// with (COMPACT_RAW_TURNS), so the two slides agree about what "full" means.
+// HANDOFF_KEEP is an illustrative size for a few lines of "here is where we
+// got to", labelled ราว on screen rather than presented as measured.
+const HANDOFF_OLD_HISTORY = sum(COMPACT_RAW_TURNS);
+const HANDOFF_KEEP = 900;
+const HANDOFF_LABELS = { idle: '▶ เล่นทีละขั้น', running: 'กำลังเล่น…', done: '↺ เล่นซ้ำ' };
+
+function initHandoff(root) {
+  const free = CONFIG.windowTokens - CONFIG.systemPromptTokens - HANDOFF_OLD_HISTORY;
+  const oldUsed = (CONFIG.systemPromptTokens + HANDOFF_OLD_HISTORY).toLocaleString();
+  const newUsed = (CONFIG.systemPromptTokens + HANDOFF_KEEP).toLocaleString();
+
+  root.innerHTML = `
+    <p><strong>ส่งต่องาน (handoff)</strong> คือการเล่าเรื่องที่ค้างอยู่ให้อีกฝ่ายทำต่อได้ เหมือนพยาบาลส่งเวรให้กะถัดไป
+    หรือบอกงานให้เพื่อนร่วมทีมก่อนลาพักร้อน — เล่าเท่าที่จำเป็น ไม่ต้องเล่าใหม่ทั้งหมด</p>
+    <p>ในที่นี้คือส่งต่อจากแชทเดิมที่เต็มแล้ว ไปแชทใหม่ที่ยังว่าง เปิดแชทใหม่ไม่ได้แปลว่าต้องเริ่มจากศูนย์ —
+    คุณเลือกเองได้ว่าจะให้อะไรตามไปด้วย</p>
+    <div class="presets"><button type="button" id="ho-play" class="play-btn">${HANDOFF_LABELS.idle}</button></div>
+    <div class="ho-pair">
+      <div><h3>แชทเดิม</h3><div class="bar" id="ho-old"></div></div>
+      <div class="ho-arrow" id="ho-arrow" aria-hidden="true">→</div>
+      <div><h3>แชทใหม่</h3><div class="bar" id="ho-new"></div></div>
+    </div>
+    <div class="ho-labels"><span class="muted" id="ho-old-label"></span><span class="muted" id="ho-new-label"></span></div>
+    <p class="muted" id="ho-status" aria-hidden="true"></p>
+    <p class="sr-only" id="ho-live" aria-live="polite" aria-atomic="true"></p>
+    <p class="muted mode-note">ก้อนที่ส่งต่อมีขนาดราว ${HANDOFF_KEEP.toLocaleString()} โทเค็น เล็กจนแทบไม่เห็นในแถบ
+    เทียบกับประวัติแชทเดิมราว ${HANDOFF_OLD_HISTORY.toLocaleString()} โทเค็นที่ปล่อยทิ้งไป</p>
+    <p class="takeaway">พอเปลี่ยนแชท ให้เล่าสั้น ๆ ว่ากำลังทำอะไร ตกลงอะไรไปแล้ว มีข้อจำกัดอะไร และขั้นต่อไปคืออะไร
+    แค่นี้ก็ทำงานต่อได้ โดยไม่ต้องลากทุกอย่างตามไป</p>`;
+
+  const oldBar = root.querySelector('#ho-old');
+  const newBar = root.querySelector('#ho-new');
+  const arrow = root.querySelector('#ho-arrow');
+  const statusEl = root.querySelector('#ho-status');
+  const liveEl = root.querySelector('#ho-live');
+  const oldLabel = root.querySelector('#ho-old-label');
+  const newLabel = root.querySelector('#ho-new-label');
+  const playBtn = root.querySelector('#ho-play');
+
+  // Segments are drawn directly rather than through renderContextBar(): this
+  // slide needs a dimmed "left behind" state and a carried-across block,
+  // neither of which is a packContext concept.
+  function draw(bar, segs) {
+    bar.textContent = '';
+    for (const [cls, tokens, label, dim] of segs) {
+      if (tokens <= 0) continue;
+      const el = document.createElement('div');
+      el.className = 'seg ' + cls + (dim ? ' dim' : '');
+      el.style.width = (tokens / CONFIG.windowTokens * 100) + '%';
+      el.textContent = tokens / CONFIG.windowTokens > 0.1 ? label : '';
+      el.title = `${label}: ${tokens.toLocaleString()} โทเค็น`;
+      bar.append(el);
+    }
+  }
+
+  const oldFull = (dim) => [
+    ['seg-sys', CONFIG.systemPromptTokens, 'คำสั่งระบบ', dim],
+    ['seg-hist', HANDOFF_OLD_HISTORY, dim ? 'ปล่อยทิ้ง' : 'ประวัติแชท', dim],
+    ['seg-free', free, '', false]
+  ];
+
+  function showFinal() {
+    draw(oldBar, oldFull(true));
+    draw(newBar, [
+      ['seg-sys', CONFIG.systemPromptTokens, 'คำสั่งระบบ', false],
+      ['seg-keep', HANDOFF_KEEP, '', false],
+      ['seg-free', CONFIG.windowTokens - CONFIG.systemPromptTokens - HANDOFF_KEEP, 'ที่ว่างสำหรับทำงานต่อ', false]
+    ]);
+    arrow.classList.add('on');
+    oldLabel.textContent = `ใช้ไป ${oldUsed} จาก ${CONFIG.windowTokens.toLocaleString()}`;
+    newLabel.textContent = `ใช้ไป ${newUsed} จาก ${CONFIG.windowTokens.toLocaleString()}`;
+    statusEl.textContent = 'แชทใหม่เริ่มด้วยเรื่องที่ค้างไว้ และเหลือที่ว่างให้ทำงานต่อเกือบเต็มหน้าต่าง';
+  }
+
+  function announceSettled() {
+    liveEl.textContent = `ส่งต่อไปแชทใหม่แล้ว แชทเดิมใช้ไป ${oldUsed} โทเค็น ` +
+      `แชทใหม่เริ่มด้วยราว ${newUsed} โทเค็น เหลือที่ว่างเกือบเต็มหน้าต่าง`;
+  }
+
+  showFinal();
+
+  let runToken = 0;
+  const setState = (s) => {
+    playBtn.disabled = s === 'playing';
+    playBtn.textContent = s === 'playing' ? HANDOFF_LABELS.running : s === 'done' ? HANDOFF_LABELS.done : HANDOFF_LABELS.idle;
+  };
+
+  playBtn.addEventListener('click', () => {
+    const myRun = ++runToken;
+    if (REDUCE_MOTION) { showFinal(); announceSettled(); setState('done'); return; }
+
+    setState('playing');
+    arrow.classList.remove('on');
+    draw(oldBar, oldFull(false));
+    draw(newBar, [['seg-free', CONFIG.windowTokens, '', false]]);
+    oldLabel.textContent = `ใช้ไป ${oldUsed} จาก ${CONFIG.windowTokens.toLocaleString()}`;
+    newLabel.textContent = 'ยังไม่ได้เริ่ม';
+    statusEl.textContent = 'แชทเดิมเต็มแล้ว ไม่เหลือที่ให้คุยต่อ';
+    liveEl.textContent = '';
+
+    setTimeout(() => {
+      if (myRun !== runToken) return;
+      draw(oldBar, [
+        ['seg-sys', CONFIG.systemPromptTokens, 'คำสั่งระบบ', true],
+        ['seg-hist', HANDOFF_OLD_HISTORY - HANDOFF_KEEP, 'ปล่อยทิ้ง', true],
+        ['seg-keep', HANDOFF_KEEP, '', false],
+        ['seg-free', free, '', false]
+      ]);
+      statusEl.textContent = 'เลือกเฉพาะสิ่งที่ต้องใช้ต่อ — เป้าหมาย ข้อสรุป ข้อจำกัด ขั้นต่อไป';
+    }, 900);
+
+    setTimeout(() => {
+      if (myRun !== runToken) return;
+      arrow.classList.add('on');
+      statusEl.textContent = 'ย่อให้เหลือก้อนเล็ก ๆ ก้อนเดียว แล้วส่งไปแชทใหม่';
+    }, 2000);
+
+    setTimeout(() => {
+      if (myRun !== runToken) return;
+      showFinal();
+      announceSettled();
+      setState('done');
+    }, 3000);
+  });
+}
+
 function armSlideReveal() {
   if (REDUCE_MOTION || typeof IntersectionObserver !== 'function') return;
   const slides = [...document.querySelectorAll('.slide')];
@@ -2056,6 +2206,7 @@ async function boot() {
   initCompaction(document.querySelector('#s2b .mount'));
   initBurn(document.querySelector('#s3 .mount'));
   initHaystack(document.querySelector('#s4 .mount'));
+  initHandoff(document.querySelector('#s4b .mount'));
   if (new URLSearchParams(location.search).get('test') === '1') runSelfTest();
 }
 
