@@ -157,7 +157,16 @@
      smallness relative to what it replaces is the slide's own point — but a
      segment you cannot see teaches nothing, so it gets a floor. */
   .seg-keep { background:#6f5aa0; min-width:5px; }
-  .seg.dim { opacity:.3; }
+  /* Dimming used to be opacity:.3 on the whole segment, which also faded the
+     label to about 1.85:1 against the page — illegible, and invisible to both
+     detectors, since they read declared colours and never composite opacity.
+     Darkening the fill with an overlay and muting the label keeps the "this is
+     the part being left behind" reading while the text stays readable. */
+  .seg.dim { background-image: linear-gradient(rgba(15,17,21,.62), rgba(15,17,21,.62)); color: var(--muted); }
+  /* Same floor as .seg-keep, same reason: thinking runs 20-200 tokens against a
+     200,000-token window, so an honest proportional slice rounds to zero pixels
+     and the beat the demo exists to show has no visual signal at all. */
+  .seg-think { min-width:5px; }
   /* Paste box is a secondary, exploratory control (unlike the bar/toggle/
      controls above it) — shrinking it from the shared textarea's 120px is
      where slide 2 gives back the height the toggle above costs it. */
@@ -348,7 +357,7 @@
 <main>
   <div class="slide title-slide"><div class="slide-inner">
     <h1>บริบทกับโทเค็น</h1>
-    <p class="muted">สี่อย่างให้ลองเล่น เลื่อนจากบนลงล่างได้เลย</p>
+    <p class="muted">กดเล่นได้ทุกอัน เลื่อนจากบนลงล่างได้เลย</p>
     <div id="status">กำลังโหลดตัวตัดคำเป็นโทเค็น (tokenizer)…</div>
   </div></div>
 
@@ -2050,7 +2059,12 @@ function initHandoff(root) {
       el.className = 'seg ' + cls + (dim ? ' dim' : '');
       el.style.width = (tokens / CONFIG.windowTokens * 100) + '%';
       el.textContent = tokens / CONFIG.windowTokens > 0.1 ? label : '';
+      // Focusable with a real accessible name, matching demos 2 and 2.1: the
+      // token count must not live only in a hover tooltip, which a keyboard or
+      // touch user can never reach.
       el.title = `${label}: ${tokens.toLocaleString()} โทเค็น`;
+      el.tabIndex = 0;
+      el.setAttribute('aria-label', `${label}: ${tokens.toLocaleString()} โทเค็น`);
       bar.append(el);
     }
   }
