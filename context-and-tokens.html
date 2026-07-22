@@ -57,8 +57,12 @@
      threshold with margin (computed 5.06:1 / 5.07:1) — see PRODUCT.md's
      "verified, not assumed" contrast commitment. Hue is preserved so the
      segments stay visually distinguishable from each other and from
-     seg-sys/seg-reply/seg-free, which already cleared 4.5:1 unchanged. */
-  .seg-sys { background:#3d5a80; } .seg-att { background:#845641; } .seg-hist { background:#466a3a; } .seg-reply { background:#5c4b8a; } .seg-free { background:#20242d; }
+     seg-sys/seg-reply/seg-free, which already cleared 4.5:1 unchanged.
+     seg-think (#8d3552, added for the "thinking" segment) was picked the
+     same way: computed 6.21:1 against --fg, and its hue (a rose/berry ~340°)
+     sits farthest from every existing segment's hue (blue 214°, orange-brown
+     19°, green 105°, purple 256°) so it never reads as a shade of one of them. */
+  .seg-sys { background:#3d5a80; } .seg-att { background:#845641; } .seg-hist { background:#466a3a; } .seg-reply { background:#5c4b8a; } .seg-free { background:#20242d; } .seg-think { background:#8d3552; }
   .bar.overflow { border-color: var(--warn); box-shadow: 0 0 0 2px var(--warn) inset; }
   .turnlist { display:flex; flex-wrap:wrap; gap:6px; }
   .turn { padding:4px 8px; border:1px solid var(--line); border-radius:6px; font-size:13px; }
@@ -209,7 +213,20 @@ const CONFIG = {
   windowTokens: 200000,
   systemPromptTokens: 1200,
   replyReserveTokens: 8000,
+  // Listed biggest-to-smallest; the button-building loop in initWindow()
+  // prepends each one, which reverses this order, so the buttons themselves
+  // read smallest-to-largest left to right.
   attachments: [
+    // 145,000 tokens ≈ a whole business quarter's transcribed team meetings:
+    // a weekly 1-hour sync plus periodic longer reviews works out to roughly
+    // 30 hours of meeting audio per quarter, at a conservative ~4,800
+    // tokens/hour for transcribed Thai speech (spoken-language transcripts,
+    // BPE-tokenized). Sized deliberately in the 100k-150k range — big enough
+    // that, combined with a modest number of turns, it actually reaches
+    // eviction (unlike the three attachments below, which together total
+    // only 62,200 tokens against this demo's 200,000-token window and can
+    // never evict anything on their own).
+    { label: 'ถอดเทปประชุมทั้งไตรมาส', tokens: 145000 },
     { label: 'PDF ยาว 50 หน้า', tokens: 37000 },
     { label: 'ไฟล์สเปรดชีตที่ส่งออกมา', tokens: 21000 },
     { label: 'อีเมลโต้ตอบยาว ๆ', tokens: 4200 }
@@ -584,21 +601,47 @@ function initTokenizer(root) {
   input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(render, 120); });
   render();
 }
-// One "turn" is a user message plus the model's reply. Real exchanges don't
-// grow — they vary: a one-word confirmation, an ordinary question and
-// answer, a request that needs a real explanation, a pasted error message
-// or code snippet the model has to read before it can respond. These ten
-// sizes are rough token counts for exactly those shapes (short confirm ~70,
-// ordinary Q&A ~150-650, a longer explanation ~950-1150, a paste-and-diagnose
-// exchange up to ~1450) and repeat in this order — fixed, not random, so a
-// presenter demoing this twice gets the same chips both times, and the
-// pattern stays visibly non-monotonic no matter how many turns pile up.
-const TURN_SIZES = [140, 620, 90, 1450, 340, 980, 210, 70, 1150, 480];
+// One "turn" is a user message, the model's thinking, and its reply. Real
+// exchanges don't grow — they vary: a one-word confirmation, an ordinary
+// question and answer, a request that needs a real explanation, a pasted
+// error message or code snippet the model has to read before it can
+// respond. `question` and `answer` are what a real exchange like that looks
+// like (short confirm ~70 combined, ordinary Q&A ~150-650, a longer
+// explanation ~950-1150, a paste-and-diagnose exchange up to ~1450) —
+// unchanged from before this file added thinking, so every number already
+// reported (346 turns to fill the window on chat alone, etc.) still holds.
+// `thinking` is new: how much a model with extended thinking has to reason
+// before answering, which scales with both how much there is to parse (a
+// pasted error/log = a big `question`) and how much reasoning the answer
+// itself implies — not with `answer` length alone, since a short answer can
+// still follow a lot of thinking. It is never carried into the conversation
+// history that gets resent (see sendTurn() below) — that's the whole point
+// of the "กำลังคิด" segment fading out at the end of a real send.
+const TURN_SHAPES = [
+  { question: 40,  thinking: 60,  answer: 100 },
+  { question: 120, thinking: 380, answer: 500 },
+  { question: 15,  thinking: 25,  answer: 75  },
+  { question: 900, thinking: 900, answer: 550 },
+  { question: 60,  thinking: 180, answer: 280 },
+  { question: 150, thinking: 630, answer: 830 },
+  { question: 40,  thinking: 90,  answer: 170 },
+  { question: 10,  thinking: 20,  answer: 60  },
+  { question: 700, thinking: 750, answer: 450 },
+  { question: 80,  thinking: 200, answer: 400 }
+];
+// Only question+answer ever land in conversation history (packContext's
+// `turns`) — derived, not a separate hand-kept list, so it can never drift
+// from TURN_SHAPES above. addTurn() (the instant "+10" button) and
+// simulateFill() (the informational calc below) only ever need this total;
+// they don't need the question/thinking/answer breakdown, which is why they
+// keep working against a flat list of numbers exactly as before.
+const TURN_SIZES = TURN_SHAPES.map(t => t.question + t.answer);
 
 // The one place that decides "what size is the next turn" — both addTurn()
 // and simulateFill() below call this instead of indexing TURN_SIZES
 // themselves, so there's only one expression that could ever get the cycle
-// wrong.
+// wrong. sendTurn() indexes TURN_SHAPES with the identical
+// `turns.length % length` expression for the same reason, one level up.
 function nextTurnSize(turns) {
   return TURN_SIZES[turns.length % TURN_SIZES.length];
 }
@@ -626,16 +669,19 @@ function simulateFill(turns, attachments) {
 }
 
 // Computed once at load, not hardcoded, so these numbers can never drift out
-// of sync with TURN_SIZES or CONFIG.attachments: how many ordinary turns it
+// of sync with TURN_SHAPES or CONFIG.attachments: how many ordinary turns it
 // takes to fill the window on their own (no attachments), and how many
-// turns' worth of budget the 50-page PDF costs by comparison. Both feed the
-// sentence in the demo's intro.
+// turns' worth of budget the single biggest attachment costs by comparison.
+// Picking the biggest one programmatically (rather than naming one by label)
+// means this sentence automatically points at whichever attachment actually
+// matters most, even if CONFIG.attachments changes again later. Both feed
+// the sentence in the demo's intro.
 const AVG_TURN_TOKENS = TURN_SIZES.reduce((a, b) => a + b, 0) / TURN_SIZES.length;
 const FILL_SCRATCH = [];
 simulateFill(FILL_SCRATCH, []);
 const TURNS_TO_FILL_WINDOW = FILL_SCRATCH.length;
-const PDF_ATTACHMENT = CONFIG.attachments.find(a => a.label.includes('PDF')) || CONFIG.attachments[0];
-const PDF_TURNS_EQUIVALENT = Math.round(PDF_ATTACHMENT.tokens / AVG_TURN_TOKENS);
+const BIGGEST_ATTACHMENT = CONFIG.attachments.reduce((a, b) => (b.tokens > a.tokens ? b : a));
+const BIGGEST_ATTACHMENT_TURNS_EQUIVALENT = Math.round(BIGGEST_ATTACHMENT.tokens / AVG_TURN_TOKENS);
 
 function initWindow(root) {
   const state = { attachments: [], turns: [], pasted: 0 };
@@ -649,13 +695,15 @@ function initWindow(root) {
     <p>ทุกอย่างที่โมเดลเก็บไว้ในหัวพร้อมกันได้ — ${CONFIG.windowTokens.toLocaleString()} โทเค็น สำหรับ
     ${CONFIG.model} ทั้งหมดนี้อยู่ในแถบเดียวกัน</p>
     <p class="muted">คุยกันเฉย ๆ ต้องราว ${TURNS_TO_FILL_WINDOW.toLocaleString()} รอบถึงจะเต็มหน้าต่างนี้
-    แต่ไฟล์แนบไฟล์เดียวอย่าง ${PDF_ATTACHMENT.label} กินพื้นที่เท่ากับคุยไปแล้วราว ${PDF_TURNS_EQUIVALENT.toLocaleString()} รอบ</p>
+    แต่ไฟล์แนบไฟล์เดียวอย่าง ${BIGGEST_ATTACHMENT.label} กินพื้นที่เท่ากับคุยไปแล้วราว ${BIGGEST_ATTACHMENT_TURNS_EQUIVALENT.toLocaleString()} รอบ</p>
     <div class="bar" id="w-bar"></div>
     <p class="muted sr-only" id="w-seg-readout" aria-hidden="true"></p>
+    <p class="muted" id="w-turn-status" aria-hidden="true"></p>
+    <p class="muted">โทเค็นคิดใช้พื้นที่แค่ตอนตอบ พอตอบเสร็จก็หายไป ไม่ถูกเก็บในประวัติแชท
+    คิดเยอะรอนานได้ แต่ไม่ทำให้หน้าต่างเต็มเร็วขึ้น</p>
     <div class="presets" id="w-controls">
-      <button data-act="turn">+ เพิ่ม 1 รอบสนทนา</button>
+      <button data-act="send">ส่งข้อความ</button>
       <button data-act="turn10">+ เพิ่ม 10 รอบสนทนา</button>
-      <button data-act="fill" title="จำลองบทสนทนาต่ออีกหลายร้อยรอบในคลิกเดียว">+ จำลองคุยหลายร้อยรอบจนดันรอบเก่าออก</button>
       <button data-act="reset">รีเซ็ต</button>
     </div>
     <p class="muted" id="w-summary" aria-live="polite" aria-atomic="true"></p>
@@ -676,41 +724,101 @@ function initWindow(root) {
   function addTurn() {
     state.turns.push(nextTurnSize(state.turns));
   }
-  // A real 200,000-token window takes on the order of TURNS_TO_FILL_WINDOW
-  // (a few hundred) realistically-sized turns to fill on chat alone —
-  // clicking "+ 1" or "+ 10" that many times isn't a live-demo-able way to
-  // reach the one moment (eviction) this whole demo exists to show.
-  // This plays out that many turns in a single click, via the same
-  // simulateFill() every measurement on this page uses, and stops the
-  // instant the first turn would be pushed out — nothing about the numbers
-  // is faked, only the clicking. It honors whatever attachments are already
-  // added, so attaching first genuinely shortens the simulated run — see the
-  // comparison sentence in the intro for why that's the more honest fast path.
-  function fillUntilEviction() {
-    const attachments = state.pasted ? [...state.attachments, state.pasted] : state.attachments;
-    simulateFill(state.turns, attachments);
-  }
-  controls.querySelector('[data-act="turn"]').onclick = () => {
-    addTurn();
-    render();
-  };
   controls.querySelector('[data-act="turn10"]').onclick = () => {
     for (let i = 0; i < 10; i++) addTurn();
     render();
   };
-  controls.querySelector('[data-act="fill"]').onclick = () => {
-    fillUntilEviction();
-    render();
-  };
   controls.querySelector('[data-act="reset"]').onclick = () => {
+    // A reset mid-send must not let that send's queued timers land afterward
+    // and silently resurrect a turn the user just cleared — see sendTurn()'s
+    // sendRunToken for the other half of this guard.
+    sendRunToken++;
+    setSendState('idle');
+    turnStatus.textContent = '';
     state.attachments = []; state.turns = []; state.pasted = 0;
     root.querySelector('#w-paste').value = '';
     root.querySelector('#w-trunc').style.display = 'none';
     render();
   };
 
+  const sendBtn = controls.querySelector('[data-act="send"]');
+  // Visual-only beat cue ("ส่งคำถาม (140 โทเค็น)" → "กำลังคิด… (380 โทเค็น)" →
+  // "ได้คำตอบ (500 โทเค็น)") shown next to the bar while a send animates.
+  // aria-hidden because it narrates *transient* states — mid-turn thinking
+  // that is about to vanish is not something worth a screen reader user
+  // catching mid-flight and later having to unlearn. See the comment on
+  // sendTurn() for why #w-summary itself only ever announces the settled
+  // result instead of following it beat-by-beat.
+  const turnStatus = root.querySelector('#w-turn-status');
+  let sendRunToken = 0;
+  function setSendState(mode) {
+    sendBtn.disabled = mode === 'sending';
+    sendBtn.textContent = mode === 'sending' ? 'กำลังส่ง…' : 'ส่งข้อความ';
+  }
+  // Plays one realistic exchange as four beats instead of silently appending
+  // a number: (1) the question lands in history, (2) "กำลังคิด" inflates —
+  // carved out of the reply reserve rather than added on top of it, because
+  // real extended-thinking tokens count against the same output budget as
+  // the reply itself, so this isn't a simplification invented for the demo,
+  // it's the actual accounting — (3) the answer appears, then (4) thinking
+  // deflates back to nothing and only question+answer remain, permanently,
+  // in history. That last beat is the whole point: thinking cost real space
+  // *during* the turn without adding a single token to what gets resent on
+  // the next one — see the "โทเค็นคิดใช้พื้นที่…" sentence above the controls.
+  //
+  // Beats 1-3 call updateBar() directly rather than render(), so #w-summary
+  // and the turn-chip list stay on the last *settled* description the whole
+  // time a send is animating — accurate live-region behavior means never
+  // announcing a state that is about to be reversed. Only the final beat
+  // (via finalize()) pushes the real total onto state.turns and calls the
+  // authoritative render(), the same path every other control on this page
+  // already uses, so the settled announcement, the segment aria-labels, and
+  // the new turn chip all update together, once, correctly.
+  function sendTurn() {
+    const shape = TURN_SHAPES[state.turns.length % TURN_SHAPES.length];
+    const myRun = ++sendRunToken;
+    const finalize = () => {
+      state.turns.push(shape.question + shape.answer);
+      render();
+    };
+    if (REDUCE_MOTION) {
+      finalize();
+      return;
+    }
+    setSendState('sending');
+    const BEAT_MS = 550; // within the 400-700ms/beat pacing target
+    const beats = [
+      { hist: shape.question, think: 0,
+        status: `ส่งคำถาม (${shape.question.toLocaleString()} โทเค็น)` },
+      { hist: shape.question, think: shape.thinking,
+        status: `กำลังคิด… (${shape.thinking.toLocaleString()} โทเค็น)` },
+      { hist: shape.question + shape.answer, think: shape.thinking,
+        status: `ได้คำตอบ (${shape.answer.toLocaleString()} โทเค็น)` }
+    ];
+    let i = 0;
+    const step = () => {
+      if (myRun !== sendRunToken) return; // superseded by reset or another send
+      const beat = beats[i];
+      updateBar([...state.turns, beat.hist], beat.think);
+      turnStatus.textContent = beat.status;
+      i++;
+      if (i < beats.length) {
+        setTimeout(step, BEAT_MS);
+      } else {
+        setTimeout(() => {
+          if (myRun !== sendRunToken) return;
+          turnStatus.textContent = '';
+          setSendState('idle');
+          finalize(); // beat 4: thinking vanishes, question+answer settle in
+        }, BEAT_MS);
+      }
+    };
+    step();
+  }
+  sendBtn.onclick = sendTurn;
+
   // Bar segments carry their label + exact count in aria-label (and title,
-  // for mouse hover) and are individually focusable — only 5 of them, so
+  // for mouse hover) and are individually focusable — only 6 of them, so
   // unlike demo 1's up-to-1200 chips this doesn't create tab-stop clutter.
   // A segment at 0 tokens is skipped (nothing to read) so tabbing never
   // lands on an invisible zero-width stop. #w-seg-readout mirrors the
@@ -745,15 +853,36 @@ function initWindow(root) {
     }, 120);
   });
 
-  function render() {
+  // Computes the bar's six segment widths for a given (possibly not-yet-
+  // committed) `turnsForDisplay` and draws them, returning packContext's
+  // result. `thinkingTokens` is carved out of the reply reserve rather than
+  // added to total demand — see sendTurn()'s comment for why that's the
+  // accurate accounting, not a simplification — so it never changes
+  // `denom`/`demand` and never disturbs seg-sys/seg-att/seg-hist/seg-free.
+  //
+  // Segments are found-or-created rather than torn down and rebuilt every
+  // call (the previous approach). Reusing the same element is what lets the
+  // `.seg { transition: width }` rule declared under
+  // prefers-reduced-motion: no-preference actually animate width changes
+  // between calls — which is how sendTurn()'s beat-by-beat updates get
+  // their motion, and, since that transition rule simply doesn't exist
+  // under reduced motion, how the reduced-motion path gets an instant jump
+  // instead, with zero extra branching needed here for the visual side.
+  function updateBar(turnsForDisplay, thinkingTokens) {
     const attachments = state.pasted ? [...state.attachments, state.pasted] : state.attachments;
     const r = packContext({
       windowTokens: CONFIG.windowTokens,
       systemTokens: CONFIG.systemPromptTokens,
       replyReserve: CONFIG.replyReserveTokens,
       attachments,
-      turns: state.turns
+      turns: turnsForDisplay
     });
+    // Every TURN_SHAPES thinking value (max 900) is comfortably under
+    // CONFIG.replyReserveTokens (8,000), so this clamp never actually
+    // engages — it's a demo-honesty backstop against a future CONFIG change
+    // making that no longer true, not load-bearing today.
+    const thinking = Math.min(thinkingTokens, CONFIG.replyReserveTokens);
+    const replyRemaining = CONFIG.replyReserveTokens - thinking;
     // Segment tokens always sum to exactly `denom`, and denom is never smaller
     // than the window, so segment widths (tokens / denom) never sum past 100%
     // no matter how far over budget the attachments push things. Without this,
@@ -767,14 +896,18 @@ function initWindow(root) {
       ['seg-att', r.attachmentTokens, 'ไฟล์แนบ'],
       ['seg-hist', r.historyTokens, 'ประวัติแชท'],
       ['seg-free', r.freeTokens, 'ว่าง'],
-      ['seg-reply', CONFIG.replyReserveTokens, 'ที่เผื่อไว้ตอบ']
+      ['seg-think', thinking, 'กำลังคิด'],
+      ['seg-reply', replyRemaining, 'ที่เผื่อไว้ตอบ']
     ];
     const bar = root.querySelector('#w-bar');
     bar.classList.toggle('overflow', r.overflow);
-    bar.textContent = '';
     for (const [cls, tokens, label] of segs) {
-      const el = document.createElement('div');
-      el.className = `seg ${cls}`;
+      let el = bar.querySelector(`.${cls}`);
+      if (!el) {
+        el = document.createElement('div');
+        el.className = `seg ${cls}`;
+        bar.append(el);
+      }
       const pct = (tokens / denom) * 100;
       el.style.width = `${pct}%`;
       el.textContent = pct > 6 ? label : '';
@@ -783,9 +916,16 @@ function initWindow(root) {
       if (tokens > 0) {
         el.tabIndex = 0;
         el.setAttribute('aria-label', desc);
+      } else {
+        el.removeAttribute('tabindex');
+        el.removeAttribute('aria-label');
       }
-      bar.append(el);
     }
+    return r;
+  }
+
+  function render() {
+    const r = updateBar(state.turns, 0);
     root.querySelector('#w-summary').textContent = r.overflow
       ? (CONFIG.systemPromptTokens + r.attachmentTokens > CONFIG.windowTokens
         ? `แค่คำสั่งระบบกับไฟล์แนบก็ปาไป ${(CONFIG.systemPromptTokens + r.attachmentTokens).toLocaleString()} โทเค็นแล้ว — มากกว่าหน้าต่างบริบททั้งหมดที่มี ${CONFIG.windowTokens.toLocaleString()} โทเค็น จึงไม่เหลือที่ให้อย่างอื่นเลย`
@@ -808,8 +948,8 @@ function initWindow(root) {
       list.append(el);
       if (isNew) newlyDropped.push(el);
     }
-    // Filling the window (see fillUntilEviction) can pile up hundreds of
-    // turns, and nobody reads chip #200. Show the first few (always wide
+    // A long conversation (or a big "+ เพิ่ม 10" spree) can pile up hundreds
+    // of turns, and nobody reads chip #200. Show the first few (always wide
     // enough to cover r.dropped, which — per packContext — is always the
     // oldest, lowest-indexed turns, so every evicted turn stays visible and
     // never hides inside the collapsed middle) and the last few (the current
