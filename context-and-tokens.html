@@ -1251,7 +1251,7 @@ function initWindow(root) {
 // as "many turns collapse into one small summary" rather than "one turn
 // folds into one turn" — see initCompaction()'s play sequence below.
 const COMPACT_RAW_TURNS = [];
-for (let i = 0; i < TURNS_TO_FILL_WINDOW * 2; i++) COMPACT_RAW_TURNS.push(nextTurnSize(COMPACT_RAW_TURNS));
+for (let i = 0; i < TURNS_TO_FILL_WINDOW; i++) COMPACT_RAW_TURNS.push(nextTurnSize(COMPACT_RAW_TURNS));
 
 // deriveCompaction() converges on the *minimal* fold — just enough of the
 // oldest turns for the recap to fit, ~0 slack left over (see its own
@@ -1264,9 +1264,18 @@ for (let i = 0; i < TURNS_TO_FILL_WINDOW * 2; i++) COMPACT_RAW_TURNS.push(nextTu
 // more generous span than the minimum deriveCompaction() itself would pick.
 // growWithoutOverflow() below still verifies (never assumes) that room is
 // actually there by running packContext against it turn by turn.
-const COMPACT_MINIMAL = deriveCompaction(COMPACT_RAW_TURNS, []);
-const COMPACT_EXTRA_FOLD = 40;
-const COMPACT_FOLD_SPAN = Math.min(COMPACT_RAW_TURNS.length, COMPACT_MINIMAL.summaryInfo.count + COMPACT_EXTRA_FOLD);
+// How compaction actually behaves, and why this is NOT deriveCompaction()'s
+// minimal fold: an agent that compacts does not summarise just the sliver
+// that overflowed and leave the other few hundred turns sitting verbatim in
+// the window — that would free almost nothing and it would have to compact
+// again on the very next turn. It summarises the conversation so far and
+// carries only the most recent exchanges through untouched, which is why the
+// window comes back nearly empty and the agent can keep working for a long
+// time afterwards. Folding everything except the last few turns is both the
+// truthful model and the one where the bar visibly collapses, because the
+// collapse IS the point of this slide.
+const COMPACT_KEEP_RECENT = 3;
+const COMPACT_FOLD_SPAN = Math.max(1, COMPACT_RAW_TURNS.length - COMPACT_KEEP_RECENT);
 const COMPACT_FOLD_BEFORE = sum(COMPACT_RAW_TURNS.slice(0, COMPACT_FOLD_SPAN));
 const COMPACT_FOLD_AFTER = summarizeTokens(COMPACT_FOLD_BEFORE);
 const COMPACT_SCRIPT = {
@@ -1280,7 +1289,7 @@ const COMPACT_SCRIPT = {
 // into a second eviction mid-story. Stops the instant packContext (LOGIC
 // block, untouched) would drop anything, so every turn this appends is
 // genuinely free of the compacted recap's own room.
-const COMPACT_CONTINUE_MAX = 6;
+const COMPACT_CONTINUE_MAX = 40;
 function growWithoutOverflow(turns, attachments, maxTurns) {
   const out = [...turns];
   for (let i = 0; i < maxTurns; i++) {
