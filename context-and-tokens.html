@@ -1313,8 +1313,14 @@ const COMPACT_LABELS = { idle: '▶ เล่นทีละขั้น', runni
 function initCompaction(root) {
   const info = COMPACT_SCRIPT.summaryInfo; // always set: COMPACT_RAW_TURNS is built long enough to overflow
   const beforeStr = info.before.toLocaleString();
-  const afterStr = info.after.toLocaleString();
-  const pct = info.before ? Math.round(info.after / info.before * 100) : 0;
+  // "ราว" (roughly) rather than a bare figure, and no percentage anywhere:
+  // summarizeTokens() applies a ~8% ratio but clamps at MAX_SUMMARY_TOKENS,
+  // and at this conversation length the clamp is what decides the number, not
+  // the ratio. A percentage derived from that collision would look measured
+  // while actually being an artifact of where the two constants meet — and a
+  // shorter conversation would print a very different one from the same model.
+  // The shrink is real and worth showing; the decimal place is not ours to claim.
+  const afterStr = 'ราว ' + info.after.toLocaleString();
   const addedTurns = COMPACT_CONTINUED.length - COMPACT_SCRIPT.pseudoTurns.length;
 
   root.innerHTML = `
@@ -1326,10 +1332,10 @@ function initCompaction(root) {
     <div class="stats">
       <div><b id="c-before">${beforeStr}</b><br><span class="muted">โทเค็นของ ${info.count.toLocaleString()} รอบเก่าที่ถูกสรุป</span></div>
       <div><b id="c-after">${afterStr}</b><br><span class="muted">โทเค็นหลังสรุปย่อ</span></div>
-      <div><b id="c-pct">${pct}%</b><br><span class="muted">เหลือจากของเดิม</span></div>
     </div>
     <p class="sr-only" id="c-live" aria-live="polite" aria-atomic="true"></p>
     <p class="muted mode-note">แอปแชทมักหยุดแล้วให้เริ่มแชทใหม่ ส่วนเอเจนต์ (agent) อย่าง Claude Code สรุปย่อแล้วคุยต่อ — แล้วแต่เครื่องมือที่ใช้<br>
+    ตัวเลขตรงนี้เป็นการจำลองให้เห็นภาพ ของจริงมักเหลือราวไม่กี่พันโทเค็น มากน้อยแล้วแต่เครื่องมือและความยาวบทสนทนา<br>
     สรุปย่อเก็บใจความไว้ แต่รายละเอียดหายไป เงื่อนไขสำคัญควรพิมพ์ย้ำหลังคุยมานาน</p>
     <p class="takeaway">หน้าต่างเต็มไม่ได้แปลว่าแชทต้องจบเสมอไป เอเจนต์สรุปย่อรอบเก่าที่สุดให้เหลือก้อนเล็ก ๆ ก้อนเดียว
     แล้วคุยต่อในพื้นที่ที่เพิ่งว่างขึ้นได้จริง</p>`;
@@ -1338,7 +1344,6 @@ function initCompaction(root) {
   const status = root.querySelector('#c-status');
   const beforeEl = root.querySelector('#c-before');
   const afterEl = root.querySelector('#c-after');
-  const pctEl = root.querySelector('#c-pct');
   const liveEl = root.querySelector('#c-live');
   const playBtn = root.querySelector('#c-play');
 
@@ -1360,7 +1365,6 @@ function initCompaction(root) {
     updateBar(COMPACT_CONTINUED);
     beforeEl.textContent = beforeStr;
     afterEl.textContent = afterStr;
-    pctEl.textContent = `${pct}%`;
     status.textContent = 'คุยต่อในพื้นที่ที่ว่างขึ้นแล้ว';
   }
   // Announces the settled outcome once — not every animation frame (see
@@ -1368,7 +1372,7 @@ function initCompaction(root) {
   // screen reader user shouldn't have to catch, and later unlearn, a
   // mid-flight number that's about to change again).
   function announceSettled() {
-    liveEl.textContent = `สรุปย่อ ${info.count.toLocaleString()} รอบเก่า จาก ${beforeStr} เหลือ ${afterStr} โทเค็น (${pct}%) ` +
+    liveEl.textContent = `สรุปย่อ ${info.count.toLocaleString()} รอบเก่า จาก ${beforeStr} เหลือ ${afterStr} โทเค็น ` +
       `แล้วคุยต่อได้อีก ${addedTurns} รอบในพื้นที่ที่เพิ่งว่างขึ้น`;
   }
 
@@ -1391,7 +1395,6 @@ function initCompaction(root) {
     setState('playing');
     beforeEl.textContent = '0';
     afterEl.textContent = '0';
-    pctEl.textContent = '0%';
     liveEl.textContent = '';
     updateBar([]);
     status.textContent = 'กำลังสะสมบทสนทนา…';
@@ -1426,7 +1429,6 @@ function initCompaction(root) {
       updateBar(COMPACT_SCRIPT.pseudoTurns); // the watchable shrink: seg-hist collapses to the recap + kept turns
       beforeEl.textContent = beforeStr;
       afterEl.textContent = afterStr;
-      pctEl.textContent = `${pct}%`;
       status.textContent = 'สรุปย่อรอบเก่าเป็นก้อนเดียวแล้ว';
       setTimeout(continueBeat, COLLAPSE_MS);
     };
