@@ -64,6 +64,22 @@
      19°, green 105°, purple 256°) so it never reads as a shade of one of them. */
   .seg-sys { background:#3d5a80; } .seg-att { background:#845641; } .seg-hist { background:#466a3a; } .seg-reply { background:#5c4b8a; } .seg-free { background:#20242d; } .seg-think { background:#8d3552; }
   .bar.overflow { border-color: var(--warn); box-shadow: 0 0 0 2px var(--warn) inset; }
+  /* Demo 4's live-API panel asks someone to paste a real credential and fire
+     a real network request — a different kind of moment from reading a
+     chart, so it borrows the page's one existing warning colour (--warn,
+     already used on .bar.overflow and the tokenizer-failure #status border)
+     instead of the same muted grey as every caption. Background is --warn's
+     literal rgb() at low alpha over the page background (custom properties
+     can't be split into r/g/b components for an alpha mix in plain CSS, so
+     the value is spelled out, same approach as .turn-summary's hardcoded
+     hex above), picked light enough that --fg text on top still clears
+     4.5:1 (verified: ~9.5:1) — a callout, not a scare box. The lead
+     sentence's colour is a reinforcement
+     on top of text that already spells out the risk in words, never the
+     only signal (PRODUCT.md: "colour never carries meaning alone"). */
+  .key-warning { border:1px solid var(--warn); border-left-width:4px; background:rgba(224,175,104,.1);
+    border-radius:8px; padding:12px 14px; margin:10px 0; color:var(--fg); }
+  .key-warning b { color:var(--warn); }
   /* Demo 2's ตัดทิ้ง/สรุปย่อ toggle. Plain <fieldset>/<input type=radio> —
      not a hand-rolled role="switch" — per PRODUCT.md's "plain semantic DOM,
      no custom widgets": the filled/empty native dot already conveys which
@@ -175,6 +191,25 @@
   #dots a { display:block; width:10px; height:10px; border-radius:50%; background:var(--line); }
   #dots a.on { background:var(--accent); }
   @media (max-width:760px) { #dots { display:none; } }
+  /* Touch targets: below the snap breakpoint every tap-operated control
+     needs to clear the 44x44 minimum. Scoped to max-width so it can never
+     overlap the 761px+ fixed-height slide layout or the 1280x720 at-rest
+     budget — those keep the original 42px buttons untouched.
+     Demo 1's preset row and demo 2's attachment/send row both reuse
+     .presets and can already wrap to 2-3 rows at phone width; padding and
+     gap are trimmed here by roughly the same amount button height grows,
+     so taller buttons don't add extra wrapped rows on top of the couple of
+     px each existing row now costs. */
+  @media (max-width:760px) {
+    button { min-height:44px; padding:7px 10px; }
+    .presets { gap:6px 8px; }
+    #h-key { min-height:44px; }
+    /* padding, not flex + align-items: summary's default display:list-item
+       is what draws the native disclosure triangle; switching it to flex
+       (tried first) silently drops that marker in Chromium. Padding keeps
+       list-item layout intact while still growing the row past 44px. */
+    summary { min-height:44px; padding:10px 0; box-sizing:border-box; }
+  }
   #more-hint { position:fixed; left:50%; bottom:54px; transform:translateX(-50%); display:none; align-items:center; gap:6px; background:var(--pane); border:1px solid var(--line); border-radius:999px; padding:5px 12px; font-size:12px; color:var(--muted); pointer-events:none; z-index:8; }
   #more-hint.show { display:flex; }
   /* Snap deck: only kicks in when a slide can actually be a full screen
@@ -1455,11 +1490,28 @@ const LIVE_QUESTION = 'What is the access code for the Rotterdam warehouse? Answ
 const LIVE_FILLER = ('Quarterly logistics review. Freight volumes held steady across the northern ' +
   'corridor, with modest gains in refrigerated capacity and no material change to insurance exposure. ').repeat(600);
 
+// A bare "เกิดข้อผิดพลาด 401" means nothing to someone who has never seen an
+// HTTP status code — this audience is non-technical office workers (see
+// PRODUCT.md's Users section), not developers. Named the two failure modes
+// this panel can actually hit (a bad key is the overwhelmingly likely one;
+// a network/CORS failure — no response at all — is the other, handled
+// separately in the catch block below since fetch() rejects before res
+// exists) with a plain-Thai sentence, and lead with that sentence. The raw
+// status/message is kept, in parentheses, for anyone who wants it.
+function explainApiFailure(status, apiMessage) {
+  const human =
+    status === 401 ? 'คีย์นี้ใช้ไม่ได้ อาจพิมพ์ผิด หมดอายุ หรือถูกเพิกถอนแล้ว ลองตรวจสอบคีย์แล้ววางใหม่' :
+    status === 403 ? 'คีย์นี้ไม่มีสิทธิ์เรียกใช้งานนี้ ลองตรวจสอบสิทธิ์ของคีย์ในบัญชี Anthropic' :
+    status === 429 ? 'เรียกถี่เกินไปในเวลาสั้น ๆ รอสักครู่แล้วลองใหม่อีกครั้ง' :
+    'คำขอไปที่ Anthropic ล้มเหลว';
+  return `${human} (รหัสสถานะ ${status}${apiMessage ? `: ${apiMessage}` : ''})`;
+}
+
 function appendLivePanel(root) {
   const wrap = document.createElement('details');
   wrap.innerHTML = `
     <summary>ขั้นสูง: ลองรันจริงด้วยคีย์ API ของคุณเอง</summary>
-    <p class="muted"><b>ทำตรงนี้เฉพาะบนเครื่องของคุณเองเท่านั้น</b> คีย์จะถูกเก็บไว้ในหน่วยความจำของแท็บนี้ชั่วคราว
+    <p class="key-warning"><b>⚠ ทำตรงนี้เฉพาะบนเครื่องของคุณเองเท่านั้น</b> คีย์จะถูกเก็บไว้ในหน่วยความจำของแท็บนี้ชั่วคราว
     ไม่ถูกบันทึกและไม่หลุดออกจากเบราว์เซอร์ของคุณ ยกเว้นตอนส่งคำขอไปที่ Anthropic รีเฟรชหน้านี้เมื่อไร
     คีย์จะหายไปทันที อย่าวางคีย์ที่ใช้งานจริงหรือคีย์ที่ใช้ร่วมกับคนอื่นบนเครื่องคอมพิวเตอร์ของงานเวิร์กช็อป</p>
     <input id="h-key" type="password" placeholder="sk-ant-..." autocomplete="off"
@@ -1495,10 +1547,18 @@ function appendLivePanel(root) {
         const json = await res.json();
         const answer = res.ok
           ? json.content.map(b => b.text || '').join('').trim()
-          : `เกิดข้อผิดพลาด ${res.status}: ${json.error?.message || 'คำขอล้มเหลว'}`;
+          : explainApiFailure(res.status, json.error?.message);
         lines.push(`ฝังลึก ${Math.round(depth * 100)}% → ${answer}`);
       } catch (err) {
-        lines.push(`ฝังลึก ${Math.round(depth * 100)}% → คำขอล้มเหลว: ${err.message}`);
+        // fetch() rejects (never resolves to a response) for a network drop
+        // or a CORS block — this endpoint doesn't send CORS headers for
+        // browser calls without the dangerous-direct-browser-access opt-in
+        // header above, so a misconfigured or blocked request lands here,
+        // not in the res.ok branch above. There is no HTTP status to show;
+        // err.message is the closest thing to "the underlying detail" here.
+        lines.push(`ฝังลึก ${Math.round(depth * 100)}% → เชื่อมต่อไปที่ Anthropic ไม่สำเร็จ ` +
+          `อาจเป็นเพราะอินเทอร์เน็ตหลุด หรือเบราว์เซอร์บล็อกการเรียกนี้ (CORS) ลองตรวจสอบการเชื่อมต่อแล้วลองใหม่ ` +
+          `(รายละเอียด: ${err.message})`);
       }
       out.textContent = lines.join('\n');
     }
@@ -1682,17 +1742,51 @@ armSlideReveal();
 // screen-size boundary as the CSS, with no separate JS branch. Purely
 // additive: if IntersectionObserver or MutationObserver is unavailable this
 // silently never shows, it can never hide real content.
+//
+// Root cause of a bug once here: this used to compare .slide's own
+// scrollHeight/clientHeight. .slide-inner plays a translateY(12px) entrance
+// animation (see armSlideReveal above) before its IntersectionObserver adds
+// .in; while that transform is live, Chromium counts the shifted child in
+// .slide's *scrollable* overflow, so .slide.scrollHeight reads ~12px taller
+// than .slide.clientHeight even with zero real overflow. On first load,
+// every slide is briefly in that pre-.in state at once, so this observer's
+// own first IntersectionObserver batch could latch "current" onto a slide
+// that never scrolls into view again — and since the MutationObserver below
+// only watches childList/subtree/characterData, not attributes, it never
+// re-ran refresh() once .in was added and the transform cleared, leaving
+// the hint stuck shown. Fix: measure the *inner* content's natural height
+// against the *outer* slide's visible height instead of reading scrollHeight
+// off the (possibly transformed) outer element — .slide-inner's own
+// scrollHeight isn't affected by a transform applied to itself, so this
+// number is correct at every point in the animation, not just after it
+// settles. A matchMedia guard mirroring the CSS breakpoint is kept as a
+// second line of defence so no future measurement quirk can ever surface
+// this below the size where slides have no fixed height to overflow.
 function initOverflowHint() {
   const hint = document.createElement('div');
   hint.id = 'more-hint';
   hint.textContent = 'เลื่อนลงเพื่อดูเพิ่ม ↓';
   document.body.append(hint);
 
+  const snapModeQuery = window.matchMedia('(min-width: 761px) and (min-height: 701px)');
   let current = null;
   function refresh() {
-    if (!current) { hint.classList.remove('show'); return; }
-    const overflowing = current.scrollHeight > current.clientHeight + 2;
-    const atBottom = current.scrollTop + current.clientHeight >= current.scrollHeight - 2;
+    if (!current || !snapModeQuery.matches) { hint.classList.remove('show'); return; }
+    const inner = current.querySelector('.slide-inner') || current;
+    // .slide-inner sits inside .slide's own top/bottom padding (32px/40px
+    // in the snap-mode rules above), so its natural scrollHeight has to be
+    // added to that padding before comparing against .slide's clientHeight
+    // — comparing the two heights directly (as an earlier version of this
+    // function did) silently under-counts every overflow by the padding
+    // amount, which happened to be more than slide 2's ~64px worst-case
+    // overflow and so never fired at all. Read the padding from computed
+    // style rather than hard-coding it so this keeps working if those
+    // values ever change.
+    const style = getComputedStyle(current);
+    const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    const innerTotal = inner.scrollHeight + padding;
+    const overflowing = innerTotal > current.clientHeight + 2;
+    const atBottom = current.scrollTop + current.clientHeight >= innerTotal - 2;
     hint.classList.toggle('show', overflowing && !atBottom);
   }
 
@@ -1709,6 +1803,9 @@ function initOverflowHint() {
     });
   }
   window.addEventListener('resize', refresh);
+  if (typeof snapModeQuery.addEventListener === 'function') {
+    snapModeQuery.addEventListener('change', refresh);
+  }
   const main = document.querySelector('main');
   if (typeof MutationObserver === 'function' && main) {
     new MutationObserver(refresh).observe(main, { childList: true, subtree: true, characterData: true });
