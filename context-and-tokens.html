@@ -63,6 +63,7 @@
   .turnlist { display:flex; flex-wrap:wrap; gap:6px; }
   .turn { padding:4px 8px; border:1px solid var(--line); border-radius:6px; font-size:13px; }
   .turn.gone { opacity:.35; text-decoration: line-through; }
+  .turn-gap { border-style:dashed; color:var(--muted); font-style:italic; }
   .cols { display:flex; align-items:flex-end; gap:4px; height:160px; margin:12px 0; }
   .col { flex:1; background:var(--accent); border-radius:3px 3px 0 0; min-height:2px; }
   /* Demo 3 only: both burn charts are split into the same three task groups
@@ -594,6 +595,40 @@ function initTokenizer(root) {
 // pattern stays visibly non-monotonic no matter how many turns pile up.
 const TURN_SIZES = [140, 620, 90, 1450, 340, 980, 210, 70, 1150, 480];
 
+// Pushes realistically-sized turns (cycling through TURN_SIZES, continuing
+// from wherever `turns` already is) onto the given array until packContext
+// reports the first eviction, then returns that result. `turns` is mutated
+// in place — callers pass either the live state.turns array (to actually
+// fill the demo) or a scratch array (to measure "how many turns would it
+// take" without touching anything on screen). Shared so the two callers
+// below can never drift into disagreement about what "a turn" costs.
+function simulateFill(turns, attachments) {
+  for (let guard = 0; guard < 5000; guard++) {
+    turns.push(TURN_SIZES[turns.length % TURN_SIZES.length]);
+    const r = packContext({
+      windowTokens: CONFIG.windowTokens,
+      systemTokens: CONFIG.systemPromptTokens,
+      replyReserve: CONFIG.replyReserveTokens,
+      attachments,
+      turns
+    });
+    if (r.dropped.length > 0) return r;
+  }
+  return null;
+}
+
+// Computed once at load, not hardcoded, so these numbers can never drift out
+// of sync with TURN_SIZES or CONFIG.attachments: how many ordinary turns it
+// takes to fill the window on their own (no attachments), and how many
+// turns' worth of budget the 50-page PDF costs by comparison. Both feed the
+// sentence in the demo's intro.
+const AVG_TURN_TOKENS = TURN_SIZES.reduce((a, b) => a + b, 0) / TURN_SIZES.length;
+const FILL_SCRATCH = [];
+simulateFill(FILL_SCRATCH, []);
+const TURNS_TO_FILL_WINDOW = FILL_SCRATCH.length;
+const PDF_ATTACHMENT = CONFIG.attachments.find(a => a.label.includes('PDF')) || CONFIG.attachments[0];
+const PDF_TURNS_EQUIVALENT = Math.round(PDF_ATTACHMENT.tokens / AVG_TURN_TOKENS);
+
 function initWindow(root) {
   const state = { attachments: [], turns: [], pasted: 0 };
   // Tracks which turn indices were already evicted as of the previous
@@ -605,12 +640,14 @@ function initWindow(root) {
   root.innerHTML = `
     <p>ทุกอย่างที่โมเดลเก็บไว้ในหัวพร้อมกันได้ — ${CONFIG.windowTokens.toLocaleString()} โทเค็น สำหรับ
     ${CONFIG.model} ทั้งหมดนี้อยู่ในแถบเดียวกัน</p>
+    <p class="muted">คุยกันเฉย ๆ ต้องราว ${TURNS_TO_FILL_WINDOW.toLocaleString()} รอบถึงจะเต็มหน้าต่างนี้
+    แต่ไฟล์แนบไฟล์เดียวอย่าง ${PDF_ATTACHMENT.label} กินพื้นที่เท่ากับคุยไปแล้วราว ${PDF_TURNS_EQUIVALENT.toLocaleString()} รอบ</p>
     <div class="bar" id="w-bar"></div>
     <p class="muted sr-only" id="w-seg-readout" aria-hidden="true"></p>
     <div class="presets" id="w-controls">
       <button data-act="turn">+ เพิ่ม 1 รอบสนทนา</button>
       <button data-act="turn10">+ เพิ่ม 10 รอบสนทนา</button>
-      <button data-act="fill">+ คุยยาว ๆ จนดันรอบเก่าออก</button>
+      <button data-act="fill" title="จำลองบทสนทนาต่ออีกหลายร้อยรอบในคลิกเดียว">+ จำลองคุยหลายร้อยรอบจนดันรอบเก่าออก</button>
       <button data-act="reset">รีเซ็ต</button>
     </div>
     <p class="muted" id="w-summary" aria-live="polite" aria-atomic="true"></p>
@@ -631,26 +668,19 @@ function initWindow(root) {
   function addTurn() {
     state.turns.push(TURN_SIZES[state.turns.length % TURN_SIZES.length]);
   }
-  // A real 200,000-token window takes on the order of a few hundred
-  // realistically-sized turns to fill — clicking "+ 1" or "+ 10" that many
-  // times isn't a live-demo-able way to reach the one moment (eviction) this
-  // whole demo exists to show. This plays out that many turns in a single
-  // click, using the exact same addTurn() sizes and packContext budget as
-  // every other button here, and stops the instant the first turn would be
-  // pushed out — nothing about the numbers is faked, only the clicking.
+  // A real 200,000-token window takes on the order of TURNS_TO_FILL_WINDOW
+  // (a few hundred) realistically-sized turns to fill on chat alone —
+  // clicking "+ 1" or "+ 10" that many times isn't a live-demo-able way to
+  // reach the one moment (eviction) this whole demo exists to show.
+  // This plays out that many turns in a single click, via the same
+  // simulateFill() every measurement on this page uses, and stops the
+  // instant the first turn would be pushed out — nothing about the numbers
+  // is faked, only the clicking. It honors whatever attachments are already
+  // added, so attaching first genuinely shortens the simulated run — see the
+  // comparison sentence in the intro for why that's the more honest fast path.
   function fillUntilEviction() {
-    for (let guard = 0; guard < 5000; guard++) {
-      addTurn();
-      const attachments = state.pasted ? [...state.attachments, state.pasted] : state.attachments;
-      const r = packContext({
-        windowTokens: CONFIG.windowTokens,
-        systemTokens: CONFIG.systemPromptTokens,
-        replyReserve: CONFIG.replyReserveTokens,
-        attachments,
-        turns: state.turns
-      });
-      if (r.dropped.length > 0) break;
-    }
+    const attachments = state.pasted ? [...state.attachments, state.pasted] : state.attachments;
+    simulateFill(state.turns, attachments);
   }
   controls.querySelector('[data-act="turn"]').onclick = () => {
     addTurn();
@@ -757,7 +787,7 @@ function initWindow(root) {
     list.textContent = '';
     const dropped = new Set(r.dropped);
     const newlyDropped = [];
-    state.turns.forEach((tokens, i) => {
+    function buildTurn(i) {
       const el = document.createElement('span');
       const isNew = dropped.has(i) && !prevDropped.has(i);
       // Newly-evicted turns are appended WITHOUT '.gone' so they paint once
@@ -766,10 +796,31 @@ function initWindow(root) {
       // created already-'.gone' — that's a no-op state, not an animation,
       // so history never replays.
       el.className = 'turn' + (dropped.has(i) && !isNew ? ' gone' : '');
-      el.textContent = `รอบที่ ${i + 1} · ${tokens.toLocaleString()}`;
+      el.textContent = `รอบที่ ${i + 1} · ${state.turns[i].toLocaleString()}`;
       list.append(el);
       if (isNew) newlyDropped.push(el);
-    });
+    }
+    // Filling the window (see fillUntilEviction) can pile up hundreds of
+    // turns, and nobody reads chip #200. Show the first few (always wide
+    // enough to cover r.dropped, which — per packContext — is always the
+    // oldest, lowest-indexed turns, so every evicted turn stays visible and
+    // never hides inside the collapsed middle) and the last few (the current
+    // end of the conversation), with a marker in between stating exactly how
+    // many ordinary, still-kept turns are hidden. #w-summary's dropped count
+    // is unaffected by any of this — it's read from `r`, not from the DOM.
+    const HEAD_MIN = 5, TAIL = 5;
+    const total = state.turns.length;
+    const headCount = Math.min(total, Math.max(HEAD_MIN, r.dropped.length));
+    if (total <= headCount + TAIL) {
+      for (let i = 0; i < total; i++) buildTurn(i);
+    } else {
+      for (let i = 0; i < headCount; i++) buildTurn(i);
+      const gap = document.createElement('span');
+      gap.className = 'turn turn-gap';
+      gap.textContent = `…อีก ${(total - headCount - TAIL).toLocaleString()} รอบ…`;
+      list.append(gap);
+      for (let i = total - TAIL; i < total; i++) buildTurn(i);
+    }
     if (newlyDropped.length) {
       requestAnimationFrame(() => requestAnimationFrame(() => {
         for (const el of newlyDropped) el.classList.add('gone');
