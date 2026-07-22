@@ -83,6 +83,11 @@
      the sentence each demo exists to deliver, so the emphasis lives in the
      words themselves (size + weight), same measure as every other paragraph
      around it. */
+  /* Prose measure. The 900px column suits the bars and charts, which want the
+     full width, but at that width a paragraph runs past 100 characters — tiring
+     to read at a glance and worse when projected. Capping prose alone keeps the
+     charts wide and the sentences short. */
+  .slide p, .slide li { max-width: 68ch; }
   .takeaway { margin:16px 0; font-weight:600; }
   .takeaway::before { content:"สรุป: "; color:var(--accent); font-weight:700; }
   /* Closing slide (#s5): the rules gain the same weight/rhythm treatment as
