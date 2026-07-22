@@ -26,19 +26,24 @@
      part of a letter" state — dashed border + dimmed, never removed or
      merged, so the chip and the token count stay truthful. */
   .chip.chip-partial { border:1px dashed var(--muted); opacity:.6; }
-  /* Roving-focus highlight for demo 1: #tk-chips itself is the only tab
-     stop (see initTokenizer) so the up-to-1200 chips never become 1200 tab
-     stops; arrow keys move a virtual "current" index and this marks it. */
-  .chip.current { outline:2px solid var(--accent); outline-offset:1px; }
+  /* Roving-focus highlight, shared by demo 1's chip group and demo 3's two
+     burn charts: the container (#tk-chips / #b-long / #b-split) is the only
+     tab stop, arrow keys move a virtual "current" index, and this marks it.
+     Demo 1 has up to 1200 chips and demo 3 has 40 columns across two
+     charts — both would be tab-stop clutter as individual stops, unlike
+     demo 2's 5 segments and demo 4's 5 columns, which stay individually
+     focusable (see .seg[tabindex] / .col[tabindex] below). */
+  .chip.current, .col.current { outline:2px solid var(--accent); outline-offset:1px; }
   /* Screen-reader-only: kept in the accessibility tree (not display:none)
      so aria-live regions using it still announce, but removed from visual
      flow so it never affects any slide's layout height. */
   .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
   /* Visible focus ring for the keyboard-focusable data elements added for
-     accessibility (bar segments, chart columns, the chip group) — the
-     default browser outline on a plain div can be too faint on this dark
-     background. */
-  #tk-chips:focus-visible, .seg[tabindex]:focus-visible, .col[tabindex]:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+     accessibility (bar segments, chart columns, the chip group, the two
+     burn-chart roving-focus groups) — the default browser outline on a
+     plain div can be too faint on this dark background. */
+  #tk-chips:focus-visible, #b-long:focus-visible, #b-split:focus-visible,
+  .seg[tabindex]:focus-visible, .col[tabindex]:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
   .stats { display:flex; gap:20px; flex-wrap:wrap; font-variant-numeric:tabular-nums; }
   .stats b { font-size:22px; }
   .presets { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
@@ -485,8 +490,17 @@ function initTokenizer(root) {
   let chipIndex = -1;
   function describeChip(i) {
     const tok = visibleTokens[i];
+    // tok.id (the raw BPE rank) stays in the mouse title as a debugging
+    // artifact but means nothing to this audience, so it's left out of the
+    // announced sentence. A chip containing U+FFFD is a token that only
+    // covers part of a multi-byte character's bytes (see TEXT_DECODER
+    // above) — routine for Thai under this tokenizer — so that's said in
+    // words instead of reading a broken-glyph character out loud.
+    if (tok.text.includes('�')) {
+      return `ชิ้นที่ ${i + 1} จาก ${visibleTokens.length}: เป็นเศษหนึ่งของตัวอักษร แสดงผลลำพังไม่ได้`;
+    }
     const shown = tok.text.replace(/\n/g, '\\n') || '(ว่าง)';
-    return `ชิ้นที่ ${i + 1} จาก ${visibleTokens.length}: "${shown}" รหัส ${tok.id}`;
+    return `ชิ้นที่ ${i + 1} จาก ${visibleTokens.length}: "${shown}"`;
   }
   function focusChip(i) {
     const prevEl = chips.querySelector('.chip.current');
@@ -772,17 +786,19 @@ function initBurn(root) {
       <div>
         <h3>แชทยาวเส้นเดียว</h3>
         <div class="task-row" id="b-long-tasks"></div>
-        <div class="cols grouped" id="b-long"></div>
+        <div class="cols grouped" id="b-long" tabindex="0" role="group"
+             aria-label="แชทยาวเส้นเดียว กราฟคอลัมน์การประมวลผลแต่ละรอบ กดลูกศรซ้ายหรือขวาเพื่ออ่านทีละรอบ"></div>
         <p class="muted">ประมวลผลรวม: <b id="b-long-total">${longTotalStr}</b> โทเค็น</p>
       </div>
       <div>
         <h3>งานเดียวกัน แต่เปิดแชทใหม่ทุก 7 รอบ</h3>
         <div class="task-row" id="b-split-tasks"></div>
-        <div class="cols grouped" id="b-split"></div>
+        <div class="cols grouped" id="b-split" tabindex="0" role="group"
+             aria-label="แยกแชททุก 7 รอบ กราฟคอลัมน์การประมวลผลแต่ละรอบ กดลูกศรซ้ายหรือขวาเพื่ออ่านทีละรอบ"></div>
         <p class="muted">ประมวลผลรวม: <b id="b-split-total">${splitTotalStr}</b> โทเค็น</p>
       </div>
     </div>
-    <p class="muted sr-only" id="b-col-readout" aria-hidden="true"></p>
+    <p class="muted sr-only" id="b-col-readout" aria-live="polite" aria-atomic="true"></p>
     <p>นั่นคืองานที่มากกว่าถึง <b>${(long.at(-1).cumulative / split.at(-1).cumulative).toFixed(1)} เท่า</b>
     สำหรับบทสนทนาชุดเดียวกัน — นี่คือเหตุผลที่แชทยาว ๆ ยิ่งคุยยิ่งช้า และกินโควตาการใช้งานเร็วขึ้นเรื่อย ๆ</p>
     <details>
@@ -811,14 +827,47 @@ function initBurn(root) {
   // from what shipped before; grouping only changes how the .col elements
   // are nested (into .task-group wrappers) for layout, and armGrowIn is
   // handed that same flat array exactly as it always was.
-  // Shared visible readout for both charts' columns: screen readers already
-  // get the per-column detail from each .col's own aria-label (set below),
-  // so this is aria-hidden and exists only so a sighted keyboard user who
-  // tabs onto a column — instead of hovering it — can see the same text
-  // the mouse title would have shown. 40 columns (20 per chart) is a small,
-  // finite dataset, so unlike demo 1's up-to-1200 chips they're each an
-  // ordinary tab stop rather than needing roving-focus.
+  // #b-long and #b-split are each a single tab stop — the same roving-focus
+  // pattern as demo 1's chip group, not 40 individual tab stops (20 per
+  // chart). Forty stops between the Play button and whatever comes after
+  // the chart is friction a keyboard user pays on every pass through the
+  // deck, including a presenter tabbing past mid-talk; unlike demo 2's 5
+  // segments or demo 4's 5 columns, 40 is not "genuinely small". Arrow keys
+  // move a virtual current column within whichever chart has focus; the
+  // shared #b-col-readout (visible-on-focus, and a live region so it also
+  // reaches screen readers) announces it using the same text the mouse
+  // title shows.
   const colReadout = root.querySelector('#b-col-readout');
+  function wireColumnRoving(box, cols) {
+    let index = -1;
+    const focusCol = (i) => {
+      const prev = box.querySelector('.col.current');
+      if (prev) prev.classList.remove('current');
+      index = i;
+      if (i < 0 || !cols[i]) { colReadout.textContent = ''; return; }
+      cols[i].classList.add('current');
+      colReadout.textContent = cols[i].title;
+    };
+    box.addEventListener('keydown', (e) => {
+      if (!cols.length) return;
+      const last = cols.length - 1;
+      if (e.key === 'ArrowRight') { e.preventDefault(); focusCol(Math.min(last, index < 0 ? 0 : index + 1)); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); focusCol(Math.max(0, index < 0 ? 0 : index - 1)); }
+      else if (e.key === 'Home') { e.preventDefault(); focusCol(0); }
+      else if (e.key === 'End') { e.preventDefault(); focusCol(last); }
+    });
+    box.addEventListener('focus', () => {
+      colReadout.classList.remove('sr-only');
+      if (cols.length) focusCol(0);
+    });
+    box.addEventListener('blur', () => {
+      const prev = box.querySelector('.col.current');
+      if (prev) prev.classList.remove('current');
+      index = -1;
+      colReadout.textContent = '';
+      colReadout.classList.add('sr-only');
+    });
+  }
   const draw = (id, series, cls, seriesLabel) => {
     const box = root.querySelector(id);
     const cols = [];
@@ -833,24 +882,15 @@ function initBurn(root) {
         const col = document.createElement('div');
         col.className = `col ${cls}`;
         col.style.height = `${(point.processed / peak) * 100}%`;
-        const desc = `${seriesLabel} · ${BURN_LABELS.taskGroups[groupIdx]} รอบที่ ${turnNumber}: ` +
+        col.title = `${seriesLabel} · ${BURN_LABELS.taskGroups[groupIdx]} รอบที่ ${turnNumber} จาก ${TURNS}: ` +
           `ประมวลผล ${point.processed.toLocaleString()} โทเค็นในรอบนี้`;
-        col.title = desc;
-        col.tabIndex = 0;
-        col.setAttribute('aria-label', desc);
         group.append(col);
         cols.push(col);
       }
       box.append(group);
     });
-    box.addEventListener('focusin', (e) => {
-      const label = e.target.getAttribute('aria-label');
-      if (!label) return;
-      colReadout.textContent = label;
-      colReadout.classList.remove('sr-only');
-    });
-    box.addEventListener('focusout', () => colReadout.classList.add('sr-only'));
     armGrowIn(box, cols);
+    wireColumnRoving(box, cols);
     return cols;
   };
   const longCols = draw('#b-long', long, '', 'แชทยาวเส้นเดียว');
@@ -929,7 +969,14 @@ function initBurn(root) {
       splitCols[i].classList.add('in');
       longTotalEl.textContent = long[i].cumulative.toLocaleString();
       splitTotalEl.textContent = split[i].cumulative.toLocaleString();
-      if (i === 0 || (i + 1) % 5 === 0) announceBurn(i, i === TURNS - 1);
+      // i === TURNS - 1 is listed explicitly (not just relied on via the
+      // %5 throttle, which only lines up with the last turn because 20 is
+      // a multiple of 5) so the final announcement always lands even if
+      // that stops being a coincidence later. Interrupting a run (pressing
+      // Play again) still only lets its own final step announce if it runs
+      // to completion — see runToken above — but whichever run *does* run
+      // to completion always gets its "done" announcement.
+      if (i === 0 || (i + 1) % 5 === 0 || i === TURNS - 1) announceBurn(i, i === TURNS - 1);
       i++;
       if (i < TURNS) setTimeout(step, STEP_MS);
       else setState('done');
