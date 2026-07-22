@@ -5,20 +5,80 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>บริบทกับโทเค็น</title>
 <style>
-  :root { --bg:#0f1115; --fg:#e8e8ea; --muted:#9aa0aa; --accent:#7aa2f7; --warn:#e0af68; --pane:#171a21; --line:#2a2f3a; }
+  /* Three colours with jobs, not one accent doing everything. --accent is
+     "you can act here" (controls, links, focus). --gain is "this is the way
+     out" (compaction, the handoff, the split-chat series). --warn is "this
+     is what it costs you" (a full window, the long-chat series, the
+     middle-of-document dip). The six bar-segment colours below are a
+     separate, already-meaningful system and are untouched by this.
+     --gain #7fc08a measures 8.83:1 on --bg and 8.13:1 on --pane; --bg on
+     --gain is the same 8.83:1, so it also works as a filled-button ground.
+     Every slide sets --slide-key to whichever of the three its content is
+     actually about, and the slide's number, payoff figure and lead stat all
+     read from that one variable — so the chrome around a demo carries the
+     same meaning the demo does instead of being uniformly blue. */
+  :root { --bg:#0f1115; --fg:#e8e8ea; --muted:#9aa0aa; --accent:#7aa2f7; --warn:#e0af68; --gain:#7fc08a;
+    --token:#a99cf0; --pane:#171a21; --line:#2a2f3a; --slide-key:var(--accent); }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.75 system-ui, "Segoe UI", "Leelawadee UI", "Thonburi", "Noto Sans Thai", sans-serif; }
   main { max-width: 900px; margin: 0 auto; padding: 24px 20px 120px; }
-  h1 { font-size: clamp(28px, 5vw, 44px); line-height:1.3; margin:.6em 0 .2em; }
-  h2 { font-size: clamp(22px, 3.5vw, 32px); line-height:1.3; margin-top: 2.4em; }
+  /* Read from the back row of a room, so the display sizes are set on real
+     viewport width rather than a timid fixed ramp. Thai stacks vowels and
+     tone marks up to two levels above the line and one below, so the
+     display line-heights stay at 1.3-1.36 (not the 1.0-1.1 a Latin-only
+     ramp would take at this size) and tracking stays at zero — negative
+     tracking collides Thai marks with neighbouring glyphs. Weight, not
+     letter-spacing, is what carries the emphasis here. */
+  h1 { font-size: clamp(34px, 6.4vw, 68px); line-height:1.3; font-weight:800; margin:0 0 .22em; }
+  h2 { font-size: clamp(24px, 3.1vw, 38px); line-height:1.32; font-weight:800; margin-top: 2.4em; }
+  /* The slide's number, in that slide's own key colour. A bare tabular
+     numeral set at 0.72 of the heading and one weight step up, sitting on
+     the heading's own line — not a label above it. */
+  .s-num { color:var(--slide-key); font-variant-numeric:tabular-nums; font-weight:800;
+    font-size:.72em; }
+  /* One figure per slide is the moment that slide exists to deliver, and it
+     is set like one. Deliberately not a card, not a bordered tile, and not
+     the same shape twice: on #s2b it is a before/after pair, on #s3 a
+     multiplier inside its own sentence, on #s1 the live count leading a row
+     of three stats. Only the number is enlarged; the sentence around it
+     stays at body size and body measure. */
+  .payoff { display:flex; align-items:baseline; flex-wrap:wrap; gap:0 .45em; margin:10px 0; }
+  .payoff-num { font-size:clamp(30px, 4.2vw, 50px); font-weight:800; line-height:1.16;
+    font-variant-numeric:tabular-nums; color:var(--slide-key); }
+  /* Same reason .slide p is capped: without a measure this caption runs the
+     full 860px column beside the figure, which is ~90 characters on one
+     line. */
+  .payoff-sub { font-size:15px; color:var(--muted); max-width:58ch; }
+  .payoff-arrow { font-size:clamp(22px, 2.6vw, 32px); color:var(--muted); line-height:1; }
+  .payoff-unit { font-size:clamp(17px, 1.8vw, 21px); font-weight:700; color:var(--slide-key); }
+  /* The before/after pair on #s2b carries the cost/way-out colours directly
+     rather than both taking the slide key: --warn 9.45:1 and --gain 8.83:1
+     on --bg. Colour is a reinforcement here — the arrow, the order, and the
+     caption below already say which is which. */
+  .payoff-before { color:var(--warn); }
+  .payoff-after { color:var(--gain); }
   section { border-top:1px solid var(--line); padding-top: 8px; }
   .muted { color: var(--muted); }
-  #status { padding:10px 14px; background:var(--pane); border:1px solid var(--line); border-radius:8px; }
+  /* The title screen is 122px of content in a 720px viewport — it was
+     top-hugging and had nothing to say for itself. Centred in snap mode
+     (see .title-slide there), with the one instruction line set at reading
+     size rather than caption size, since it is the only thing telling a
+     self-guided attendee that the page is meant to be pressed. --muted on
+     --bg is 7.18:1. */
+  .title-sub { color:var(--muted); font-size:clamp(17px, 1.7vw, 21px); margin:0 0 22px; }
+  #status { display:inline-block; padding:10px 14px; background:var(--pane); border:1px solid var(--line); border-radius:8px; }
   textarea { width:100%; min-height:120px; background:var(--pane); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:12px; font:inherit; }
-  .chips { display:flex; flex-wrap:wrap; gap:2px; margin:12px 0; }
-  .chip { padding:2px 4px; border-radius:4px; font:14px/1.4 ui-monospace, monospace; white-space:pre-wrap; }
-  .chip:nth-child(odd) { background:#2b3550; }
-  .chip:nth-child(even) { background:#38304a; }
+  /* The chips are demo 1's whole payoff — the thing an attendee types into
+     and watches rearrange — so they get a little more presence than the
+     original 2px/14px treatment: slightly larger type, real padding, and
+     two tints pushed further apart so a token boundary is legible across a
+     room rather than only at a laptop's arm length. --fg on #2f3b5c
+     measures 9.03:1 and on #3f3556 9.25:1 (both were verified after the
+     change, not assumed). */
+  .chips { display:flex; flex-wrap:wrap; gap:3px; margin:12px 0; }
+  .chip { padding:3px 6px; border-radius:5px; font:15px/1.45 ui-monospace, monospace; white-space:pre-wrap; }
+  .chip:nth-child(odd) { background:#2f3b5c; }
+  .chip:nth-child(even) { background:#3f3556; }
   /* A token boundary can fall inside a multi-byte character (routine for Thai
      under a BPE tokenizer sized around English/code). TEXT_DECODER's
      fatal:false then renders that partial byte sequence as U+FFFD. Rather
@@ -44,11 +104,40 @@
      plain div can be too faint on this dark background. */
   #tk-chips:focus-visible, #b-long:focus-visible, #b-split:focus-visible,
   .seg[tabindex]:focus-visible, .col[tabindex]:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-  .stats { display:flex; gap:20px; flex-wrap:wrap; font-variant-numeric:tabular-nums; }
+  .stats { display:flex; gap:20px; flex-wrap:wrap; font-variant-numeric:tabular-nums; align-items:baseline; }
   .stats b { font-size:22px; }
+  /* The one stat in a row that is the reason the row exists (demo 1: the
+     live token count) leads at display size in the slide's key colour; the
+     supporting two stay at 22px. A row of three equally-weighted numbers
+     tells a reader nothing about which one to watch. */
+  .stats .lead b { font-size:clamp(30px, 3.6vw, 42px); line-height:1.15; color:var(--slide-key); }
   .presets { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
   button { background:var(--pane); color:var(--fg); border:1px solid var(--line); border-radius:999px; padding:6px 12px; font:inherit; cursor:pointer; }
   button:hover { border-color:var(--accent); }
+  /* Control hierarchy. Demo 2 used to present eight near-identical pills in
+     one row, mixing four unrelated kinds of action, so a first-timer had to
+     read all eight to find the one that starts the story. Four visual
+     weights now, strongest first:
+       .play-btn   filled, the single primary action ("ส่งข้อความ" / play)
+       .btn-step   outlined in the same accent — the primary's sibling
+       .btn-add    a pill that ADDS something to the bar, carrying a dot in
+                   the exact colour of the segment it grows, so the link
+                   between pressing it and the bar moving is visible before
+                   you press it (the label still says what it is, so colour
+                   is never the only signal)
+       .btn-quiet  borderless — รีเซ็ต, which undoes rather than does
+     .ctl-row separates the primary line from the adders line: the action
+     that starts the story is alone on its own line and cannot be confused
+     with the six that decorate it. */
+  .ctl-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:10px 0; }
+  .ctl-row .ctl-lead { color:var(--muted); font-size:14px; margin-right:2px; }
+  .btn-step { background:transparent; border-color:var(--accent); color:var(--accent);
+    border-radius:10px; font-weight:600; padding:8px 16px; }
+  .btn-step:hover { background:rgba(122,162,247,.14); border-color:var(--accent); }
+  .btn-add::before { content:""; display:inline-block; width:9px; height:9px; border-radius:50%;
+    background:var(--dot, var(--line)); margin-right:7px; vertical-align:middle; }
+  .btn-quiet { background:transparent; border-color:transparent; color:var(--muted); }
+  .btn-quiet:hover { color:var(--fg); border-color:var(--line); }
   /* Comfortable reading measure. `main` is capped at 900px, but a line that
      runs edge to edge there still reaches ~107 characters for this body
      text — too wide to track by eye, especially read at a glance in a
@@ -88,8 +177,13 @@
      to read at a glance and worse when projected. Capping prose alone keeps the
      charts wide and the sentences short. */
   .slide p, .slide li { max-width: 68ch; }
-  .takeaway { margin:16px 0; font-weight:600; }
-  .takeaway::before { content:"สรุป: "; color:var(--accent); font-weight:700; }
+  /* The lead-in now takes the slide's own key colour rather than the single
+     blue accent: on #s3/#s4 the conclusion is a cost and on #s2b/#s4b it is
+     a way out, and the sentence that says so is coloured accordingly. Every
+     --slide-key value clears 4.5:1 on --bg (accent 7.50, gain 8.83, warn
+     9.45, token 7.83). */
+  .takeaway { margin:16px 0; font-weight:600; font-size:17px; }
+  .takeaway::before { content:"สรุป: "; color:var(--slide-key); font-weight:700; }
   /* Closing slide (#s5): the rules gain the same weight/rhythm treatment as
      a takeaway (see above) via a coloured ::marker on the native <ol> number
      — plain semantic list, nothing re-implemented — rather than turning
@@ -100,10 +194,19 @@
      already used on .takeaway and .play-btn, so the coloured marker clears
      4.5:1 too, though a decorative list marker only needs 3:1. */
   .rules { padding-left:1.3em; }
-  .rules li { margin:16px 0; font-size:17px; line-height:1.6; }
+  .rules li { margin:14px 0; font-size:17px; line-height:1.6; }
   .rules li::marker { color:var(--accent); font-weight:700; }
-  .rule-link { display:block; margin-top:2px; font-size:13px; color:var(--muted); text-decoration:none; }
-  .rule-link:hover, .rule-link:focus-visible { color:var(--accent); text-decoration:underline; }
+  /* Was 13px muted text at 20.8px tall — under the 44px touch minimum the
+     rest of the page meets, and quiet enough that it read as a caption
+     rather than the way back to the demo. Now accent-coloured with a real
+     underline so it reads as the link it is, and (below the snap
+     breakpoint, where the page is actually touched) padded to a 44px row.
+     inline-flex + wrap so a rule that links to two demos can carry two of
+     them side by side. --accent on --bg is 7.50:1. */
+  .rule-links { display:flex; flex-wrap:wrap; gap:4px 16px; margin-top:3px; }
+  .rule-link { display:inline-flex; align-items:center; font-size:14px; color:var(--accent);
+    text-decoration:none; border-bottom:1px solid rgba(122,162,247,.4); }
+  .rule-link:hover, .rule-link:focus-visible { border-bottom-color:var(--accent); }
   /* The page's one closing line — plain statement, not a marketing sign-off,
      set apart with a full top rule (never a side-stripe) the same way a
      printed page marks its own end. */
@@ -148,8 +251,19 @@
      across" segment, and the dimming of what gets left behind are new. */
   .ho-pair { display:grid; grid-template-columns:1fr 34px 1fr; gap:12px; align-items:center; margin:12px 0 4px; }
   .ho-pair h3 { margin:0 0 6px; font-size:15px; }
-  .ho-arrow { text-align:center; font-size:21px; color:var(--line); transition:color .4s ease; }
-  .ho-arrow.on { color:var(--accent); }
+  /* The colour transition moved into the reduced-motion block below (it was
+     the one animation on the page declared outside it); under `reduce` the
+     arrow now snaps to its lit state instead of easing there. */
+  .ho-arrow { position:relative; text-align:center; font-size:21px; color:var(--line); }
+  .ho-arrow.on { color:var(--gain); }
+  /* The block physically crossing the gutter, rather than an arrow that
+     merely changes colour when it has already arrived. Invisible at rest
+     (opacity:0) and animated only by the rule inside the reduced-motion
+     block below, so under `reduce` it simply never appears and the slide
+     loses nothing — the same left-behind/carried-across state is still
+     drawn in the two bars and stated in the status line. */
+  .ho-dot { position:absolute; left:50%; top:50%; width:10px; height:10px; margin:-5px 0 0 -5px;
+    border-radius:2px; background:var(--seg-keep-color, #6f5aa0); opacity:0; pointer-events:none; }
   .ho-labels { display:flex; justify-content:space-between; font-size:13px; }
   /* min-width so the carried block stays visible: at ~900 tokens against a
      200,000-token window it is well under half a percent and would otherwise
@@ -205,7 +319,7 @@
      pairing as .takeaway's lead-in. Shared class so all four Play buttons
      stay visually identical. */
   .play-btn { background:var(--accent); color:var(--bg); border-color:var(--accent);
-    border-radius:10px; font-weight:700; padding:8px 18px; }
+    border-radius:10px; font-weight:700; padding:9px 22px; font-size:17px; }
   .play-btn:hover { background:#8fb4ff; border-color:#8fb4ff; }
   .play-btn[disabled] { opacity:.6; cursor:default; }
   /* Demo 1's presets keep no memory of which one produced the current text.
@@ -261,16 +375,76 @@
     .slide-inner.reveal { opacity: 0; transform: translateY(12px); }
     .slide-inner.reveal.in { opacity: 1; transform: translateY(0); transition: opacity .25s ease, transform .25s ease; }
     #more-hint.show { animation: notice-fade-in .2s ease; }
+    button, .rule-link { transition: background-color .15s ease, border-color .15s ease, color .15s ease; }
+    .ho-arrow { transition: color .4s ease; }
+    /* Micro-delight, three places only — each one the exact moment its demo
+       exists to deliver, each one a settle rather than a bounce (ease-out,
+       no overshoot, no elastic), and every one of them purely a way of
+       drawing attention to a state that is already correct without it.
+       Retriggered from JS by removing the class, forcing a reflow, and
+       re-adding it (see pulse() in the script). */
+    /* 1. The compaction collapse — the deck's best beat. The "after" figure
+          settles in as seg-hist's own width transition carries the bar
+          down. */
+    .pulse { animation: pulse-settle .45s ease-out; }
+    @keyframes pulse-settle {
+      from { opacity: .25; transform: translateY(5px); }
+      to   { opacity: 1;   transform: none; }
+    }
+    /* 2. A sent message landing in demo 2's turn list: the newest chip
+          arrives lit and cools to an ordinary turn over half a second. */
+    .turn.landed { animation: turn-land .55s ease-out; }
+    @keyframes turn-land {
+      from { background: rgba(122,162,247,.32); border-color: var(--accent); }
+      to   { background: transparent;           border-color: var(--line); }
+    }
+    /* 3. The handoff block crossing the gutter between the two windows. */
+    .ho-arrow.cross .ho-dot { animation: ho-cross .9s ease-in-out; }
+    @keyframes ho-cross {
+      0%   { transform: translateX(-16px) scale(.7); opacity: 0; }
+      25%  { opacity: 1; }
+      75%  { opacity: 1; }
+      100% { transform: translateX(16px) scale(.7); opacity: 0; }
+    }
   }
-  .col.alt { background:#7a9c7a; }
+  /* Demo 3's two series now carry the page's cost/way-out pair instead of
+     blue-vs-sage: the single long chat (the expensive shape) is --warn, the
+     same colour demo 4 already uses for the middle-of-document dip and the
+     bar uses for an overflowing window; splitting the work is --gain. The
+     totals under each chart take the matching colour, so the 2.4x gap reads
+     before anyone has parsed a single column. Both totals are also stated
+     in words and digits, so nothing here is carried by colour alone.
+     Contrast on --bg: --warn 9.45:1, --gain 8.83:1. */
+  #b-long .col { background:var(--warn); }
+  .col.alt { background:var(--gain); }
   .col.mid { background:var(--warn); }
-  .h-vals, .h-pos { display:flex; gap:4px; text-align:center; }
+  .total-hot { color:var(--warn); }
+  .total-cool { color:var(--gain); }
+  .h-vals, .h-pos { display:flex; gap:4px; text-align:center; align-items:flex-end; }
   .h-vals div, .h-pos div { flex:1; font-size:13px; }
   .h-vals div { font-weight:600; }
+  /* The 52% in the middle is the entire finding of demo 4, so it is the one
+     value in the row that is set like a finding. Its colour matches the
+     column directly beneath it (.col.mid, --warn, 9.45:1). */
+  .h-vals div.dip { font-size:clamp(24px, 2.6vw, 32px); line-height:1.15; font-weight:800; color:var(--warn); }
   .h-pos div { color:var(--muted); font-size:12px; }
+  .h-pos div.dip { color:var(--warn); font-weight:700; }
   .split2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
   @media (max-width:640px) { .split2 { grid-template-columns:1fr; } }
   details { margin:12px 0; }
+  /* Each slide declares which of the three meanings it carries; everything
+     keyed off --slide-key (the number, the payoff figure, the lead stat,
+     the "สรุป:" lead-in) follows automatically. Reads as an arc rather than
+     decoration: what a token is, what the window is, the window filling is
+     survivable, here is what a long chat costs you, here is what it costs
+     your answer, and here is how you carry work out of it. */
+  #s1  { --slide-key: var(--token); }
+  #s2  { --slide-key: var(--accent); }
+  #s2b { --slide-key: var(--gain); }
+  #s3  { --slide-key: var(--warn); }
+  #s4  { --slide-key: var(--warn); }
+  #s4b { --slide-key: var(--gain); }
+  #s5  { --slide-key: var(--accent); }
   #dots { position:fixed; right:14px; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:10px; z-index:8; }
   #dots a { display:block; width:10px; height:10px; border-radius:50%; background:var(--line); }
   #dots a.on { background:var(--accent); }
@@ -286,8 +460,14 @@
      px each existing row now costs. */
   @media (max-width:760px) {
     button { min-height:44px; padding:7px 10px; }
-    .presets { gap:6px 8px; }
+    .presets, .ctl-row { gap:6px 8px; }
     #h-key { min-height:44px; }
+    /* The four (now five) back-links on the closing slide were 20.8px tall
+       — the one place on the page that missed the 44px minimum every other
+       control meets. Padding, not a min-height alone, so the whole 44px row
+       is the tap target rather than a 21px link floating inside it. */
+    .rule-link { min-height:44px; padding:2px 0; }
+    .rule-links { gap:0 18px; }
     /* padding, not flex + align-items: summary's default display:list-item
        is what draws the native disclosure triangle; switching it to flex
        (tried first) silently drops that marker in Chromium. Padding keeps
@@ -333,11 +513,26 @@
        1280x720 after every change in this pass (see the fix report); none
        run over at rest. None of this touches the continuous-scroll/mobile
        layout below the breakpoint, where the extra height simply scrolls. */
+    /* Rhythm. Every slide used to open with exactly the same 12px of
+       padding and the same heading margin, which is a large part of why the
+       deck read as one long dashboard rather than eight screens. The three
+       slides that carry real slack at 1280x720 (measured, see the fit
+       table in the report) now open with visibly more air above and below
+       the heading; the dense ones stay tight because they have to. The
+       title slide centres in the viewport instead of hugging the top. */
+    .title-slide { display:flex; flex-direction:column; justify-content:center; padding-bottom:0; }
+    #s2b, #s4b, #s5 { padding-top: 44px; }
+    #s2b > .slide-inner > h2, #s4b > .slide-inner > h2, #s5 > .slide-inner > h2 { margin-bottom: .55em; }
     .slide h2 { margin-top: 0; margin-bottom: .3em; }
     .slide h3 { margin: .5em 0 .3em; }
     .slide p { margin: .35em 0; }
     .slide .takeaway { margin: 5px 0; }
-    .slide .presets { margin: 5px 0; }
+    .slide .presets, .slide .ctl-row { margin: 5px 0; }
+    /* .slide .presets button (below) would otherwise flatten the primary
+       and step buttons back to the same 4x8 padding as every pill in the
+       row — the exact hierarchy this pass exists to create. */
+    .slide .play-btn { padding: 7px 20px; }
+    .slide .btn-step { padding: 6px 15px; }
     .slide .chips { margin: 5px 0; }
     .slide details { margin: 8px 0; }
     .slide .mode-note { margin: 4px 0 5px; }
@@ -347,6 +542,12 @@
     .slide .turnlist { gap: 4px; }
     .slide .turn { padding: 3px 7px; }
     #w-paste { height: 52px; min-height: 52px; padding: 8px; }
+    /* Same trade demo 2's paste box already makes, and for the same reason:
+       in snap mode the type-here box holds one or two sentences, not an
+       essay, and the height it gives back is what pays for slide 1's larger
+       chips and display-size token count. Below the breakpoint it keeps the
+       shared 120px. */
+    #tk-input { height: 88px; min-height: 88px; }
     .slide .cols { height: clamp(120px, 20vh, 160px); }
     .slide .rules li { margin: 10px 0; }
     .slide .closing-line { margin-top: 16px; padding-top: 12px; }
@@ -357,28 +558,46 @@
 <main>
   <div class="slide title-slide"><div class="slide-inner">
     <h1>บริบทกับโทเค็น</h1>
-    <p class="muted">กดเล่นได้ทุกอัน เลื่อนจากบนลงล่างได้เลย</p>
+    <p class="title-sub">หกหน้าจอ กดเล่นได้ทุกอัน เลื่อนจากบนลงล่างได้เลย</p>
     <div id="status">กำลังโหลดตัวตัดคำเป็นโทเค็น (tokenizer)…</div>
   </div></div>
 
-  <section id="s1" class="slide"><div class="slide-inner"><h2>1. โทเค็น (token) คืออะไร</h2><div class="mount"></div></div></section>
-  <section id="s2" class="slide"><div class="slide-inner"><h2>2. หน้าต่างบริบท (context window)</h2><div class="mount"></div></div></section>
-  <section id="s2b" class="slide"><div class="slide-inner"><h2>2.1 พอหน้าต่างเต็ม จะเกิดอะไรขึ้น</h2><div class="mount"></div></div></section>
-  <section id="s3" class="slide"><div class="slide-inner"><h2>3. ทำไมยิ่งคุยยิ่งช้าและกินโควตาเร็ว</h2><div class="mount"></div></div></section>
-  <section id="s4" class="slide"><div class="slide-inner"><h2>4. จุดที่มันพลาด</h2><div class="mount"></div></div></section>
+  <!-- Slide numbers run 1-6 without a gap. The deck used to read
+       1 / 2 / 2.1 / 3 / 4 / 5, where "2.1" implied compaction was a footnote
+       to the window slide rather than its own idea, and the closing screen
+       had no place in the sequence at all. Compaction is now slide 3 in its
+       own right and everything after it shifts up one; the closing screen
+       is not numbered because it is not a seventh idea, and says so ("สรุป"
+       marker) rather than leaving a hole at the end of the count.
+       The section ids are unchanged — the scroll dots, the closing slide's
+       back-links and any URL an attendee has already bookmarked all point
+       at them. -->
+  <section id="s1" class="slide"><div class="slide-inner"><h2><span class="s-num">1</span> โทเค็น (token) คืออะไร</h2><div class="mount"></div></div></section>
+  <section id="s2" class="slide"><div class="slide-inner"><h2><span class="s-num">2</span> หน้าต่างบริบท (context window)</h2><div class="mount"></div></div></section>
+  <section id="s2b" class="slide"><div class="slide-inner"><h2><span class="s-num">3</span> พอหน้าต่างเต็ม จะเกิดอะไรขึ้น</h2><div class="mount"></div></div></section>
+  <section id="s3" class="slide"><div class="slide-inner"><h2><span class="s-num">4</span> ทำไมยิ่งคุยยิ่งช้าและกินโควตาเร็ว</h2><div class="mount"></div></div></section>
+  <section id="s4" class="slide"><div class="slide-inner"><h2><span class="s-num">5</span> จุดที่มันพลาด</h2><div class="mount"></div></div></section>
 
-  <section id="s4b" class="slide"><div class="slide-inner"><h2>5. ส่งต่องาน (handoff) ไปแชทใหม่</h2><div class="mount"></div></div></section>
+  <section id="s4b" class="slide"><div class="slide-inner"><h2><span class="s-num">6</span> ส่งต่องาน (handoff) ไปแชทใหม่</h2><div class="mount"></div></div></section>
 
-  <section id="s5" class="slide"><div class="slide-inner"><h2>สี่ข้อที่ควรจำ</h2>
+  <!-- Every slide in the deck is now reachable from here. The summary used
+       to point back at demos 1-4 only, which left compaction (slide 3,
+       including the 343-turns-into-one collapse) and the handoff (slide 6)
+       with no rule to their name — the two slides that answer "so what do I
+       actually do when it fills up". Rule 2 is theirs, and links to both. -->
+  <section id="s5" class="slide"><div class="slide-inner"><h2><span class="s-num">สรุป</span> ห้าข้อที่ควรจำ</h2>
     <ol class="rules">
       <li><b>เปิดแชทใหม่ทุกครั้งที่เปลี่ยนเรื่อง</b> ข้อความเก่า ๆ คือภาระที่โมเดลต้องอ่านซ้ำทุกครั้ง
-        <a class="rule-link" href="#s3">ย้อนดูตัวอย่าง ↑</a></li>
+        <span class="rule-links"><a class="rule-link" href="#s3">ย้อนดูตัวอย่าง ↑</a></span></li>
+      <li><b>แชทเต็มไม่ได้แปลว่าต้องเริ่มใหม่จากศูนย์</b> เล่าสั้น ๆ ว่าค้างอะไรไว้ ตกลงอะไรไปแล้ว แล้วยกไปแชทใหม่
+        บางเครื่องมือก็สรุปย่อให้เองแล้วคุยต่อได้เลย
+        <span class="rule-links"><a class="rule-link" href="#s2b">ย้อนดูตอนสรุปย่อ ↑</a><a class="rule-link" href="#s4b">ย้อนดูตอนส่งต่องาน ↑</a></span></li>
       <li><b>ถามคำถามไว้ก่อนเลย</b> คำถามที่ฝังอยู่ลึก ๆ มักได้คำตอบที่แย่กว่า
-        <a class="rule-link" href="#s4">ย้อนดูตัวอย่าง ↑</a></li>
+        <span class="rule-links"><a class="rule-link" href="#s4">ย้อนดูตัวอย่าง ↑</a></span></li>
       <li><b>แนบไฟล์แค่ครั้งเดียว ตรงจุดที่ต้องใช้</b> เอกสารที่แนบเข้าไปจะค้างอยู่ในหน้าต่างบริบท และถูกอ่านซ้ำทุกครั้งหลังจากนั้น
-        <a class="rule-link" href="#s2">ย้อนดูตัวอย่าง ↑</a></li>
+        <span class="rule-links"><a class="rule-link" href="#s2">ย้อนดูตัวอย่าง ↑</a></span></li>
       <li><b>สั้นดีกว่ายาว</b> คำสั่งที่กระชับจะเร็วกว่า ถูกกว่า และแม่นยำกว่า
-        <a class="rule-link" href="#s1">ย้อนดูตัวอย่าง ↑</a></li>
+        <span class="rule-links"><a class="rule-link" href="#s1">ย้อนดูตัวอย่าง ↑</a></span></li>
     </ol>
     <p class="closing-line">ไม่ได้อยากให้จำคำว่าโทเค็น แค่อยากให้พรุ่งนี้เช้าคุณเริ่มแชทใหม่บ่อยขึ้น</p>
   </div></section>
@@ -585,6 +804,23 @@ function fadeAndRemoveStatus(el) {
   setTimeout(() => el.remove(), 200);
 }
 
+// Restarts a CSS animation on an element that may already be carrying the
+// class (pressing "ถัดไป" through the same beat twice, or auto-play landing
+// on a beat a manual step already reached). Removing the class, reading a
+// layout property to force a style flush, then re-adding it is the only
+// reliable way to replay a CSS animation without a second class.
+//
+// Every class this is used with is declared ONLY inside the
+// prefers-reduced-motion: no-preference block, so under `reduce` adding it
+// is inert — no animation, no layout effect, and nothing on screen depends
+// on it having run. The early return is belt-and-braces on top of that.
+function pulse(el, cls = 'pulse') {
+  if (!el || REDUCE_MOTION) return;
+  el.classList.remove(cls);
+  void el.offsetWidth; // forces the removal to take effect before re-adding
+  el.classList.add(cls);
+}
+
 // Staggered grow-in for column charts (demo 3's two burn-rate charts, demo
 // 4's recall curve). `cols` elements are expected to already be at their
 // correct final height/appearance by the time this is called — that is the
@@ -643,10 +879,15 @@ function initTokenizer(root) {
     <div class="presets"></div>
     <textarea id="tk-input">โทเค็นคือหน่วยที่โมเดลใช้อ่านข้อความจริง ๆ</textarea>
     <p class="muted notice-fade" id="tk-trunc" style="display:none">นับแค่ 20,000 ตัวอักษรแรกเท่านั้น ส่วนที่เหลือด้านล่างจะไม่ถูกนับ</p>
-    <p class="muted notice-fade" id="tk-partial" style="display:none">ตัวอักษรไทยหรืออิโมจิมักถูกแบ่งเป็นหลายโทเค็น
-    ชิ้นที่มีกรอบเส้นประจึงมีแค่เศษหนึ่งของมัน แสดงผลลำพังไม่ได้</p>
+    <!-- Trimmed to a single line: the takeaway below now states the "Thai
+         gets chopped into many pieces" half of this outright, so the notice
+         only has to explain what a dashed chip is. It appears exactly when a
+         partial token exists, which on this slide is also when slide 1 is at
+         its tallest — so the line it gives back is the one that keeps the
+         Thai-vs-English preset inside a 720px viewport. -->
+    <p class="muted notice-fade" id="tk-partial" style="display:none">ชิ้นที่มีกรอบเส้นประคือเศษหนึ่งของตัวอักษร แสดงผลลำพังไม่ได้</p>
     <div class="stats">
-      <div><b id="tk-tokens">0</b><br><span class="muted">โทเค็น</span></div>
+      <div class="lead"><b id="tk-tokens">0</b><br><span class="muted">โทเค็น</span></div>
       <div><b id="tk-chars">0</b><br><span class="muted">ตัวอักษร</span></div>
       <div><b id="tk-ratio">0</b><br><span class="muted">ตัวอักษรต่อโทเค็น</span></div>
     </div>
@@ -656,10 +897,9 @@ function initTokenizer(root) {
     <p class="muted sr-only" id="tk-chip-readout" aria-live="polite" aria-atomic="true"></p>
     <p class="muted notice-fade" id="tk-chip-cap" style="display:none">แสดงแค่ ${MAX_CHIPS.toLocaleString()}
     ชิ้นแรกเท่านั้น ตัวเลขจำนวนโทเค็นด้านบนรวมส่วนที่เหลือไว้แล้ว เพียงแต่ไม่ได้วาดให้ดู</p>
-    <p class="takeaway">คำที่ใช้บ่อยมักถูกนับเป็นโทเค็นเดียว โมเดลจึงไม่ได้เห็นตัวอักษรข้างในจริง ๆ
-    นี่คือเหตุผลที่มันนับตัวอักษรผิดบ่อย ๆ ส่วนคำที่ใช้ไม่บ่อยหรือภาษาอื่นจะถูกสับเป็นหลายโทเค็นแทนที่จะเป็นโทเค็นเดียว
-    ซึ่งกินพื้นที่ในหน้าต่างบริบทมากกว่าหลายเท่าสำหรับความหมายเดียวกัน (ในตัวอย่างไทยกับอังกฤษด้านบน
-    ต่างกันประมาณ 6.5 เท่า)</p>`;
+    <p class="takeaway">คำที่ใช้บ่อยถูกนับเป็นโทเค็นเดียว โมเดลจึงไม่เห็นตัวอักษรข้างใน นี่คือเหตุผลที่มันนับตัวอักษรผิดบ่อย ๆ
+    ส่วนภาษาไทยถูกสับเป็นหลายชิ้น ความหมายเดียวกันจึงกินพื้นที่มากกว่าราว <b>6.5 เท่า</b>
+    (กดปุ่ม "ไทยเทียบอังกฤษ" ด้านบนแล้วดูตัวเลขเทียบกันได้)</p>`;
 
   const input = root.querySelector('#tk-input');
   const chips = root.querySelector('#tk-chips');
@@ -1116,6 +1356,10 @@ function initWindow(root) {
   // can tell a newly-evicted turn from one that has been struck through
   // since a prior click — only the former should play the fall-out fade.
   let prevDropped = new Set();
+  // Index of the turn the send sequence just committed, for the one-shot
+  // "landed" highlight in render()'s buildChip below. -1 means "this render
+  // was not caused by a send".
+  let landedIndex = -1;
 
   root.innerHTML = `
     <p>ทุกอย่างที่โมเดลเก็บไว้ในหัวพร้อมกันได้ — ${CONFIG.windowTokens.toLocaleString()} โทเค็น สำหรับ
@@ -1127,11 +1371,22 @@ function initWindow(root) {
     <p class="muted" id="w-turn-status" aria-hidden="true"></p>
     <p class="muted">โทเค็นคิดใช้พื้นที่แค่ตอนตอบ พอตอบเสร็จก็หายไป ไม่ถูกเก็บในประวัติแชท
     คิดเยอะรอนานได้ แต่ไม่ทำให้หน้าต่างเต็มเร็วขึ้น</p>
-    <div class="presets" id="w-controls">
+    <!-- Two rows, not one row of eight lookalikes. Row one is the story: the
+         send button is the only filled control on the slide and has the line
+         to itself apart from its own step sibling, so "press this first" needs
+         no explanation. Row two is material you can put INTO the window,
+         introduced by a lead-in that says so, each pill dotted in the exact
+         colour of the bar segment it grows (--dot, set below from the same
+         hex the .seg rules use). รีเซ็ต ends the row borderless — it undoes,
+         it does not do. -->
+    <div class="ctl-row" id="w-controls">
       <button type="button" data-act="send" class="play-btn"></button>
-      <button type="button" data-act="next"></button>
-      <button data-act="turn10">+ เพิ่ม 10 รอบสนทนา</button>
-      <button data-act="reset">รีเซ็ต</button>
+      <button type="button" data-act="next" class="btn-step"></button>
+    </div>
+    <div class="ctl-row" id="w-adders">
+      <span class="ctl-lead">ใส่เข้าไปในหน้าต่าง:</span>
+      <button data-act="turn10" class="btn-add" style="--dot:#466a3a">+ 10 รอบสนทนา</button>
+      <button data-act="reset" class="btn-quiet">รีเซ็ต</button>
     </div>
     <p class="muted" id="w-summary" aria-live="polite" aria-atomic="true"></p>
     <div class="turnlist" id="w-turns"></div>
@@ -1150,16 +1405,24 @@ function initWindow(root) {
   }
 
   const controls = root.querySelector('#w-controls');
+  const adders = root.querySelector('#w-adders');
+  // Inserted just after the row's lead-in span rather than prepended to the
+  // row, so the attachments sit ahead of "+ 10 รอบสนทนา" and รีเซ็ต while
+  // still reversing CONFIG.attachments' biggest-first order into a
+  // smallest-to-largest read, exactly as the old prepend did.
+  const adderAnchor = adders.querySelector('.ctl-lead');
   for (const att of CONFIG.attachments) {
     const b = document.createElement('button');
+    b.className = 'btn-add';
+    b.style.setProperty('--dot', '#845641'); // .seg-att — the segment this button grows
     b.textContent = `+ ${att.label}`;
     b.onclick = () => { state.attachments.push(att.tokens); render(); };
-    controls.prepend(b);
+    adders.insertBefore(b, adderAnchor.nextSibling);
   }
   function addTurn() {
     state.turns.push(nextTurnSize(state.turns));
   }
-  controls.querySelector('[data-act="turn10"]').onclick = () => {
+  adders.querySelector('[data-act="turn10"]').onclick = () => {
     for (let i = 0; i < 10; i++) addTurn();
     render();
   };
@@ -1208,6 +1471,7 @@ function initWindow(root) {
         apply() {
           turnStatus.textContent = '';
           state.turns.push(shape.question + shape.answer);
+          landedIndex = state.turns.length - 1;
           render(); // writes #w-summary's settled description itself
         },
         playDelay: BEAT_MS
@@ -1225,7 +1489,7 @@ function initWindow(root) {
     initialIndex: -1 // nothing has been sent yet — no "settled" send to rest on
   });
 
-  controls.querySelector('[data-act="reset"]').onclick = () => {
+  adders.querySelector('[data-act="reset"]').onclick = () => {
     // A reset mid-send must not let that send's queued timers land afterward
     // and silently resurrect a turn the user just cleared.
     sendStepper.cancelPlay();
@@ -1314,6 +1578,12 @@ function initWindow(root) {
       el.className = 'turn' + (dropped.has(i) && !isNew ? ' gone' : '');
       el.textContent = `รอบที่ ${i + 1} · ${state.turns[i].toLocaleString()}`;
       list.append(el);
+      // The message landing. Only the turn the send sequence just committed
+      // (see landedIndex, cleared at the end of this render) lights up, and
+      // only after it is in the document so pulse()'s reflow can take. Any
+      // other route to this list — the "+ 10 รอบ" button, a reset, a paste
+      // re-render — leaves landedIndex at -1 and paints nothing.
+      if (i === landedIndex) pulse(el, 'landed');
       if (isNew) newlyDropped.push(el);
     }
     // A long conversation (or a big "+ เพิ่ม 10" spree) can pile up hundreds
@@ -1342,6 +1612,7 @@ function initWindow(root) {
       }));
     }
     prevDropped = dropped;
+    landedIndex = -1; // one-shot: never replays on a later, unrelated render
   }
 
   render();
@@ -1439,20 +1710,30 @@ function initCompaction(root) {
   const addedTurns = COMPACT_CONTINUED.length - COMPACT_SCRIPT.pseudoTurns.length;
 
   root.innerHTML = `
-    <p>บทสนทนาสะสมไปเรื่อย ๆ จนหน้าต่างเต็ม เอเจนต์ (agent) หลายตัวไม่ได้หยุดตรงนั้น — มันสรุปย่อรอบเก่าที่สุดให้เหลือ
-    ก้อนเล็ก ๆ ก้อนเดียว แล้วคุยต่อในพื้นที่ที่เพิ่งว่างขึ้น กดเล่นเพื่อดูขั้นตอนทั้งหมด</p>
-    <div class="presets" id="c-controls">
+    <p>บทสนทนาสะสมไปเรื่อย ๆ จนหน้าต่างเต็ม แต่ <strong>เอเจนต์ (agent)</strong> — โปรแกรมผู้ช่วยที่รับงานยาว ๆ
+    ไปทำต่อเองได้หลายขั้นตอน — ไม่ได้หยุดตรงนั้น มันสรุปย่อรอบเก่าที่สุดให้เหลือก้อนเล็ก ๆ ก้อนเดียว
+    แล้วคุยต่อในพื้นที่ที่เพิ่งว่างขึ้น กดเล่นเพื่อดูขั้นตอนทั้งหมด</p>
+    <div class="ctl-row" id="c-controls">
       <button type="button" id="c-play" class="play-btn"></button>
-      <button type="button" id="c-next"></button>
+      <button type="button" id="c-next" class="btn-step"></button>
     </div>
     <div class="bar" id="c-bar"></div>
     <p class="muted" id="c-status" aria-hidden="true"></p>
-    <div class="stats">
-      <div><b id="c-before">${beforeStr}</b><br><span class="muted">โทเค็นของ ${info.count.toLocaleString()} รอบเก่าที่ถูกสรุป</span></div>
-      <div><b id="c-after">${afterStr}</b><br><span class="muted">โทเค็นหลังสรุปย่อ</span></div>
+    <!-- The collapse, set as the one thing on this slide worth looking at:
+         the before figure in --warn (what a full window costs) and the after
+         in --gain (what compaction gives back), with the arrow between them
+         doing the work a two-cell stat row could not. Both figures come
+         straight from COMPACT_SCRIPT.summaryInfo, unchanged — this is a
+         typographic change, not a numeric one. -->
+    <div class="payoff" id="c-payoff">
+      <span class="payoff-num payoff-before" id="c-before">${beforeStr}</span>
+      <span class="payoff-arrow" aria-hidden="true">→</span>
+      <span class="payoff-num payoff-after" id="c-after">${afterStr}</span>
+      <span class="payoff-sub" id="c-sub">โทเค็น — ${info.count.toLocaleString()} รอบเก่ายุบเหลือก้อนเดียว</span>
     </div>
     <p class="sr-only" id="c-live" aria-live="polite" aria-atomic="true"></p>
-    <p class="muted mode-note">แอปแชทมักหยุดแล้วให้เริ่มแชทใหม่ ส่วนเอเจนต์ (agent) อย่าง Claude Code สรุปย่อแล้วคุยต่อ — แล้วแต่เครื่องมือที่ใช้<br>
+    <p class="muted mode-note">แอปแชทมักหยุดแล้วให้เริ่มแชทใหม่ ส่วนเอเจนต์อย่าง Claude Code
+    (เครื่องมือของ Anthropic ที่นักพัฒนาใช้สั่งงานเขียนโค้ดด้วยข้อความ) จะสรุปย่อแล้วคุยต่อ — แล้วแต่เครื่องมือที่ใช้<br>
     ตัวเลขตรงนี้เป็นการจำลองให้เห็นภาพ ของจริงมักเหลือราวไม่กี่พันโทเค็น มากน้อยแล้วแต่เครื่องมือและความยาวบทสนทนา<br>
     สรุปย่อเก็บใจความไว้ แต่รายละเอียดหายไป เงื่อนไขสำคัญควรพิมพ์ย้ำหลังคุยมานาน</p>
     <p class="takeaway">หน้าต่างเต็มไม่ได้แปลว่าแชทต้องจบเสมอไป เอเจนต์สรุปย่อรอบเก่าที่สุดให้เหลือก้อนเล็ก ๆ ก้อนเดียว
@@ -1462,6 +1743,9 @@ function initCompaction(root) {
   const status = root.querySelector('#c-status');
   const beforeEl = root.querySelector('#c-before');
   const afterEl = root.querySelector('#c-after');
+  const payoffEl = root.querySelector('#c-payoff');
+  const subEl = root.querySelector('#c-sub');
+  const SUB_SETTLED = `โทเค็น — ${info.count.toLocaleString()} รอบเก่ายุบเหลือก้อนเดียว`;
   const liveEl = root.querySelector('#c-live');
   const playBtn = root.querySelector('#c-play');
   const nextBtn = root.querySelector('#c-next');
@@ -1484,6 +1768,7 @@ function initCompaction(root) {
     updateBar(COMPACT_CONTINUED);
     beforeEl.textContent = beforeStr;
     afterEl.textContent = afterStr;
+    subEl.textContent = SUB_SETTLED;
     status.textContent = 'คุยต่อในพื้นที่ที่ว่างขึ้นแล้ว';
   }
   const settledText = () => `สรุปย่อ ${info.count.toLocaleString()} รอบเก่า จาก ${beforeStr} เหลือ ${afterStr} โทเค็น ` +
@@ -1498,10 +1783,14 @@ function initCompaction(root) {
   // manual Next alike.
   function buildSteps() {
     // Steps 1-3 share the same still-full bar; only the status text differs.
+    // Nothing has been summarised yet at these three beats. The pair used to
+    // read "0 → 0", which looks like a measurement; an em dash reads as the
+    // absence it actually is, and the caption says so in words.
     const stillFull = (statusText) => () => {
       updateBar(COMPACT_RAW_TURNS);
-      beforeEl.textContent = '0';
-      afterEl.textContent = '0';
+      beforeEl.textContent = '—';
+      afterEl.textContent = '—';
+      subEl.textContent = 'ยังไม่ได้สรุปย่อ';
       status.textContent = statusText;
     };
     return [
@@ -1525,6 +1814,10 @@ function initCompaction(root) {
           updateBar(COMPACT_SCRIPT.pseudoTurns); // the watchable shrink: seg-hist collapses to the recap + kept turns
           beforeEl.textContent = beforeStr;
           afterEl.textContent = afterStr;
+          subEl.textContent = SUB_SETTLED;
+          // The one moment on the slide worth marking: the figures settle in
+          // as the bar's own width transition carries seg-hist down.
+          pulse(payoffEl);
           status.textContent = 'สรุปย่อรอบเก่าเป็นก้อนเดียวแล้ว';
         },
         announce: () => `สรุปย่อ ${info.count.toLocaleString()} รอบเก่า จาก ${beforeStr} เหลือ ${afterStr} โทเค็น`,
@@ -1582,9 +1875,9 @@ function initBurn(root) {
   root.innerHTML = `
     <p>ทุกครั้งที่กดส่งข้อความ โมเดลจะอ่านบทสนทนาทั้งหมดซ้ำอีกครั้ง รอบที่ 20 จึงไม่เท่ากับรอบที่ 1 —
     เพราะมันแบกรอบก่อนหน้าทั้งสิบเก้ารอบไว้ด้วย งานสามอย่างเหมือนกัน ยี่สิบรอบเท่ากัน ต่างกันแค่วิธีจัดแชท</p>
-    <div class="presets" id="b-controls">
+    <div class="ctl-row" id="b-controls">
       <button type="button" id="b-play" class="play-btn"></button>
-      <button type="button" id="b-next"></button>
+      <button type="button" id="b-next" class="btn-step"></button>
     </div>
     <p class="sr-only" id="b-live" aria-live="polite" aria-atomic="true"></p>
     <div class="split2">
@@ -1593,19 +1886,25 @@ function initBurn(root) {
         <div class="task-row" id="b-long-tasks"></div>
         <div class="cols grouped" id="b-long" tabindex="0" role="group"
              aria-label="แชทยาวเส้นเดียว กราฟคอลัมน์การประมวลผลแต่ละรอบ กดลูกศรซ้ายหรือขวาเพื่ออ่านทีละรอบ"></div>
-        <p class="muted">ประมวลผลรวม: <b id="b-long-total">${longTotalStr}</b> โทเค็น</p>
+        <p class="muted">ประมวลผลรวม: <b id="b-long-total" class="total-hot">${longTotalStr}</b> โทเค็น</p>
       </div>
       <div>
         <h3>งานเดียวกัน แต่เปิดแชทใหม่ทุก 7 รอบ</h3>
         <div class="task-row" id="b-split-tasks"></div>
         <div class="cols grouped" id="b-split" tabindex="0" role="group"
              aria-label="แยกแชททุก 7 รอบ กราฟคอลัมน์การประมวลผลแต่ละรอบ กดลูกศรซ้ายหรือขวาเพื่ออ่านทีละรอบ"></div>
-        <p class="muted">ประมวลผลรวม: <b id="b-split-total">${splitTotalStr}</b> โทเค็น</p>
+        <p class="muted">ประมวลผลรวม: <b id="b-split-total" class="total-cool">${splitTotalStr}</b> โทเค็น</p>
       </div>
     </div>
     <p class="muted sr-only" id="b-col-readout" aria-live="polite" aria-atomic="true"></p>
-    <p>นั่นคืองานที่มากกว่าถึง <b>${(long.at(-1).cumulative / split.at(-1).cumulative).toFixed(1)} เท่า</b>
-    สำหรับบทสนทนาชุดเดียวกัน — นี่คือเหตุผลที่แชทยาว ๆ ยิ่งคุยยิ่งช้า และกินโควตาการใช้งานเร็วขึ้นเรื่อย ๆ</p>
+    <!-- Same multiplier, same arithmetic, same source values — set as the
+         finding it is instead of a bold run inside a paragraph. -->
+    <div class="payoff">
+      <span class="payoff-num">${(long.at(-1).cumulative / split.at(-1).cumulative).toFixed(1)}</span>
+      <span class="payoff-unit">เท่า</span>
+      <span class="payoff-sub">คืองานที่มากกว่า สำหรับบทสนทนาชุดเดียวกัน —
+      นี่คือเหตุผลที่แชทยาว ๆ ยิ่งคุยยิ่งช้า และกินโควตาเร็วขึ้นเรื่อย ๆ</span>
+    </div>
     <details>
       <summary>ถ้าคุณจ่ายตามราคา API แทนที่จะเป็นแบบสมัครสมาชิก</summary>
       <p class="muted">แชทยาวเส้นเดียว ≈ $${dollars(long.at(-1).cumulative)} เทียบกับ
@@ -1864,9 +2163,20 @@ function initHaystack(root) {
     root.innerHTML = `
       <p>ตำแหน่งที่ข้อมูลชิ้นหนึ่งอยู่ในเอกสารยาว ๆ มีผลต่อความแม่นยำที่โมเดลจะหาเจอ ข้อมูลที่อยู่ใกล้ต้นหรือใกล้ท้าย
       มักถูกจำได้ดี ส่วนข้อมูลที่ฝังอยู่ตรงกลางมักถูกจำได้แย่ที่สุด — ทั้งที่โมเดลอ่านทุกคำเหมือนกันหมด</p>
-      <div class="h-vals">${LITERATURE_CURVE.points.map(p => `<div>${Math.round(p.accuracy * 100)}%</div>`).join('')}</div>
+      <!-- The middle column is the whole finding, so its value and its
+           position label are the two things set apart (class "dip", --warn,
+           matching .col.mid directly below them). Chosen by the same
+           depth > 0 && depth < 1 test the columns themselves use, computed
+           from LITERATURE_CURVE — no value is hard-coded here. -->
+      <div class="h-vals">${LITERATURE_CURVE.points.map(p => {
+        const dip = p.depth === 0.5 ? ' class="dip"' : '';
+        return `<div${dip}>${Math.round(p.accuracy * 100)}%</div>`;
+      }).join('')}</div>
       <div class="cols" id="h-curve"></div>
-      <div class="h-pos">${LITERATURE_CURVE.points.map(p => `<div>${haystackPosLabel(p.depth)}</div>`).join('')}</div>
+      <div class="h-pos">${LITERATURE_CURVE.points.map(p => {
+        const dip = p.depth === 0.5 ? ' class="dip"' : '';
+        return `<div${dip}>${haystackPosLabel(p.depth)}</div>`;
+      }).join('')}</div>
       <p class="muted sr-only" id="h-col-readout" aria-hidden="true"></p>
       <p class="muted">เป็นตัวเลขโดยประมาณ อ่านจากกราฟที่เผยแพร่ไว้ ไม่ใช่ตัวเลขที่แม่นยำเป๊ะ ความแม่นยำในการจำลดลงจาก
       ${Math.round(first.accuracy * 100)}% ใกล้ต้นเรื่อง เหลือ ${Math.round(worst.accuracy * 100)}% ตรงกลางเรื่อง
@@ -2021,13 +2331,13 @@ function initHandoff(root) {
     หรือบอกงานให้เพื่อนร่วมทีมก่อนลาพักร้อน — เล่าเท่าที่จำเป็น ไม่ต้องเล่าใหม่ทั้งหมด</p>
     <p>ในที่นี้คือส่งต่อจากแชทเดิมที่เต็มแล้ว ไปแชทใหม่ที่ยังว่าง เปิดแชทใหม่ไม่ได้แปลว่าต้องเริ่มจากศูนย์ —
     คุณเลือกเองได้ว่าจะให้อะไรตามไปด้วย</p>
-    <div class="presets">
+    <div class="ctl-row">
       <button type="button" id="ho-play" class="play-btn"></button>
-      <button type="button" id="ho-next"></button>
+      <button type="button" id="ho-next" class="btn-step"></button>
     </div>
     <div class="ho-pair">
       <div><h3>แชทเดิม</h3><div class="bar" id="ho-old"></div></div>
-      <div class="ho-arrow" id="ho-arrow" aria-hidden="true">→</div>
+      <div class="ho-arrow" id="ho-arrow" aria-hidden="true">→<span class="ho-dot"></span></div>
       <div><h3>แชทใหม่</h3><div class="bar" id="ho-new"></div></div>
     </div>
     <div class="ho-labels"><span class="muted" id="ho-old-label"></span><span class="muted" id="ho-new-label"></span></div>
@@ -2124,7 +2434,15 @@ function initHandoff(root) {
         playDelay: 900
       },
       {
-        apply: showFinal,
+        apply() {
+          showFinal();
+          // The carried block actually crossing the gutter, rather than an
+          // arrow that only changes colour once it has already arrived. The
+          // .cross class is inert under reduced motion (the keyframes live
+          // in the no-preference block) and .ho-dot is opacity:0 at rest, so
+          // this adds nothing to the settled state either way.
+          pulse(arrow, 'cross');
+        },
         announce: settledText,
         playAnnounce: settledText,
         playDelay: 2100
