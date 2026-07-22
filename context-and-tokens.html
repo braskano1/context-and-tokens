@@ -64,10 +64,42 @@
      19°, green 105°, purple 256°) so it never reads as a shade of one of them. */
   .seg-sys { background:#3d5a80; } .seg-att { background:#845641; } .seg-hist { background:#466a3a; } .seg-reply { background:#5c4b8a; } .seg-free { background:#20242d; } .seg-think { background:#8d3552; }
   .bar.overflow { border-color: var(--warn); box-shadow: 0 0 0 2px var(--warn) inset; }
+  /* Demo 2's ตัดทิ้ง/สรุปย่อ toggle. Plain <fieldset>/<input type=radio> —
+     not a hand-rolled role="switch" — per PRODUCT.md's "plain semantic DOM,
+     no custom widgets": the filled/empty native dot already conveys which
+     mode is selected without relying on colour, and keyboard reachability
+     (Tab to the group, arrow keys between options) comes for free. The
+     :has() rule below only adds a redundant, purely visual emphasis on top
+     of that already-sufficient native state. */
+  /* <legend> refuses to act as a flex item even with display:flex on its
+     <fieldset> (verified in the browser this page ships to — it always
+     forces its own line, costing a whole extra row here), so the *visible*
+     label is a plain aria-hidden span living beside the radios instead; the
+     real <legend> stays in the DOM as sr-only, giving the radiogroup its
+     accessible name the native way without paying for a second line. */
+  .mode-toggle { display:flex; align-items:center; flex-wrap:wrap; gap:4px 14px; width:fit-content;
+    margin:10px 0; padding:4px 12px 4px 12px; border:1px solid var(--line); border-radius:999px; }
+  .mode-toggle-label { font-size:13px; color:var(--muted); }
+  .mode-toggle label { display:flex; align-items:center; gap:5px; font-size:14px; cursor:pointer; }
+  .mode-toggle label:has(input:checked) { color:var(--fg); font-weight:600; }
+  .mode-note { margin:6px 0 10px; font-size:14px; line-height:1.6; }
+  /* Paste box is a secondary, exploratory control (unlike the bar/toggle/
+     controls above it) — shrinking it from the shared textarea's 120px is
+     where slide 2 gives back the height the toggle above costs it. */
+  #w-paste { min-height:72px; }
   .turnlist { display:flex; flex-wrap:wrap; gap:6px; }
   .turn { padding:4px 8px; border:1px solid var(--line); border-radius:6px; font-size:13px; }
   .turn.gone { opacity:.35; text-decoration: line-through; }
   .turn-gap { border-style:dashed; color:var(--muted); font-style:italic; }
+  /* Reuses .seg-hist's own colour (#466a3a — it's a hardcoded class rule,
+     not a custom property, so the literal hex is repeated here rather than
+     a var() that would silently resolve to nothing) rather than introducing
+     a new one: a compacted chip visually belongs with "ประวัติแชท" (the bar
+     segment its tokens land in), so it keeps the colour that already
+     carries that meaning up there. Already verified at 5.07:1 against --fg
+     — see the .seg-hist comment above (re-verified for this feature: still
+     5.07:1, #e8e8ea on #466a3a). */
+  .turn-summary { background:#466a3a; border-color:#466a3a; font-weight:600; }
   .cols { display:flex; align-items:flex-end; gap:4px; height:160px; margin:12px 0; }
   .col { flex:1; background:var(--accent); border-radius:3px 3px 0 0; min-height:2px; }
   /* Demo 3 only: both burn charts are split into the same three task groups
@@ -179,6 +211,8 @@
     .slide .presets { margin: 8px 0; }
     .slide .chips { margin: 8px 0; }
     .slide details { margin: 8px 0; }
+    .slide .mode-toggle { margin: 8px 0; }
+    .slide .mode-note { margin: 4px 0 8px; }
     .slide .cols { height: clamp(120px, 20vh, 160px); }
   }
 </style>
@@ -683,12 +717,112 @@ const TURNS_TO_FILL_WINDOW = FILL_SCRATCH.length;
 const BIGGEST_ATTACHMENT = CONFIG.attachments.reduce((a, b) => (b.tokens > a.tokens ? b : a));
 const BIGGEST_ATTACHMENT_TURNS_EQUIVALENT = Math.round(BIGGEST_ATTACHMENT.tokens / AVG_TURN_TOKENS);
 
+// Compaction, sketched in numbers: real summarization tools condense a
+// transcript into a short recap that keeps the decisions and facts, not the
+// back-and-forth that produced them — "keep the gist" summarization like
+// that commonly lands around 5-15% of the original length. 1/12 (~8%) sits
+// in the middle of that range. MIN_SUMMARY_TOKENS keeps a recap from
+// reading as free — even "we discussed X, decided Y" costs a minimum
+// handful of words. MAX_SUMMARY_TOKENS keeps it from growing without limit
+// on the other end: a recap plateaus rather than scaling linearly forever —
+// real agent compaction re-summarizes its own summary as a conversation
+// keeps growing, which keeps the recap itself bounded even though this demo
+// only models one level of that. Without a ceiling, folding in enough turns
+// (hundreds) could produce a recap bigger than this demo's own leftover
+// budget once large attachments are also loaded — an honest number, but a
+// dead end with no smaller recap behind it to replace it, which is exactly
+// what deriveCompaction()'s convergence loop below exists to avoid.
+// Math.min(before, …) additionally caps it so a summary can never cost MORE
+// than the turns it stands in for, however small `before` is.
+const SUMMARY_COMPRESSION_RATIO = 1 / 12;
+const MIN_SUMMARY_TOKENS = 40;
+const MAX_SUMMARY_TOKENS = 2000;
+function summarizeTokens(before) {
+  return Math.min(before, MAX_SUMMARY_TOKENS, Math.max(MIN_SUMMARY_TOKENS, Math.round(before * SUMMARY_COMPRESSION_RATIO)));
+}
+
+// The single place that decides what demo 2's turn list looks like on
+// screen. In 'evict' mode (or whenever nothing has overflowed yet in
+// 'compact' mode) that's just `rawTurns` itself, chip for chip — identical
+// to how this demo always worked, and packContext (LOGIC block, untouched)
+// is still the only place eviction is decided.
+//
+// In 'compact' mode, once packContext's hard eviction against the real,
+// un-summarized turns (`hard` — the ground truth of what would be pushed
+// out) finds something to drop, every dropped turn is folded into ONE
+// pseudo-turn (summarizeTokens(before)) standing in for all of them. That
+// pseudo-turn is re-derived fresh from `rawTurns` on every call, never
+// hand-accumulated turn by turn, so a second overflow always re-summarizes
+// the *whole* dropped span against the same ratio rather than stacking a
+// second summary block — which is also what "further sends append after
+// the summary, and if it overflows again it compacts again" falls out of
+// for free, with no separate state to keep in sync.
+//
+// hard.dropped.length is only a starting guess for how many turns to fold
+// in, not the final answer: a summary is small but not zero-cost, and if
+// the kept turns behind it are themselves packed close to the budget, the
+// recap can be the one thing that no longer fits. Handing packContext a
+// pseudo-turn list where the summary itself gets hard-evicted would render
+// as a struck-through "สรุปการคุยก่อนหน้า" chip with no smaller recap behind
+// it to replace it — a dead end the reader has no way to make sense of. So
+// this grows `span` (how many of the oldest real turns are folded in) one
+// turn at a time until a packContext run on [summary, ...kept] keeps the
+// summary — packContext's dropped set is always the front-most contiguous
+// prefix (see packContext's own loop in the LOGIC block), so "position 0
+// survives" and "nothing at all was dropped" are the same fact. Each turn
+// folded in frees roughly its own ~553-token average cost while adding only
+// ~46 tokens (1/12) to the summary, so this converges in a handful of
+// iterations even at the extremes tested against this demo's real numbers.
+//
+// `pseudoTurns` is what actually gets handed to packContext for real —
+// updateBar() below runs it again on this exact array — so the summary's
+// tokens land in the real historyTokens total like any other turn; it is
+// never a free bar segment. `chips` is index-aligned 1:1 with `pseudoTurns`
+// (position 0 is the summary when one exists), which is what lets a single
+// `dropped` Set from that packContext call double as "which of these chips
+// is currently struck through" in both modes without extra bookkeeping.
+function deriveCompaction(rawTurns, attachments, mode) {
+  const packArgs = {
+    windowTokens: CONFIG.windowTokens,
+    systemTokens: CONFIG.systemPromptTokens,
+    replyReserve: CONFIG.replyReserveTokens,
+    attachments
+  };
+  const hard = packContext({ ...packArgs, turns: rawTurns });
+  if (mode !== 'compact' || hard.dropped.length === 0) {
+    return {
+      pseudoTurns: rawTurns,
+      chips: rawTurns.map((tokens, index) => ({ kind: 'turn', index, tokens })),
+      summaryInfo: null
+    };
+  }
+  let span = hard.dropped.length;
+  let before, after, pseudoTurns, pack;
+  while (span <= rawTurns.length) {
+    before = sum(rawTurns.slice(0, span));
+    after = summarizeTokens(before);
+    pseudoTurns = [after, ...rawTurns.slice(span)];
+    pack = packContext({ ...packArgs, turns: pseudoTurns });
+    if (pack.dropped.length === 0) break; // the recap itself survives
+    span++;
+  }
+  const chips = [
+    { kind: 'summary', count: span, before, after },
+    ...rawTurns.slice(span).map((tokens, k) => ({ kind: 'turn', index: span + k, tokens }))
+  ];
+  return { pseudoTurns, chips, summaryInfo: { count: span, before, after } };
+}
+
 function initWindow(root) {
-  const state = { attachments: [], turns: [], pasted: 0 };
-  // Tracks which turn indices were already evicted as of the previous
-  // render(), so a fresh render (which rebuilds every <span> from scratch)
-  // can tell a newly-evicted turn from one that has been struck through
-  // since a prior click — only the former should play the fall-out fade.
+  const state = { attachments: [], turns: [], pasted: 0, mode: 'evict' };
+  // Tracks which chips were already evicted as of the previous render(), so
+  // a fresh render (which rebuilds every <span> from scratch) can tell a
+  // newly-evicted chip from one that has been struck through since a prior
+  // click — only the former should play the fall-out fade. Keyed by a
+  // logical chip key (see chipKey() in render()), not array position — a
+  // chip's position can shift between renders in สรุปย่อ mode (the summary
+  // is always re-derived from scratch — see deriveCompaction()) even though
+  // the chip itself is the "same" one from the reader's point of view.
   let prevDropped = new Set();
 
   root.innerHTML = `
@@ -701,6 +835,14 @@ function initWindow(root) {
     <p class="muted" id="w-turn-status" aria-hidden="true"></p>
     <p class="muted">โทเค็นคิดใช้พื้นที่แค่ตอนตอบ พอตอบเสร็จก็หายไป ไม่ถูกเก็บในประวัติแชท
     คิดเยอะรอนานได้ แต่ไม่ทำให้หน้าต่างเต็มเร็วขึ้น</p>
+    <fieldset class="mode-toggle" id="w-mode">
+      <legend class="sr-only">เมื่อหน้าต่างเต็ม</legend>
+      <span class="mode-toggle-label" aria-hidden="true">เมื่อหน้าต่างเต็ม</span>
+      <label><input type="radio" name="w-mode" value="evict" checked> ตัดทิ้ง</label>
+      <label><input type="radio" name="w-mode" value="compact"> สรุปย่อ</label>
+    </fieldset>
+    <p class="muted mode-note">แอปแชทมักหยุดแล้วให้เริ่มแชทใหม่ ส่วนเอเจนต์ (agent) อย่าง Claude Code สรุปย่อแล้วคุยต่อ — แล้วแต่เครื่องมือที่ใช้<br>
+    สรุปย่อเก็บใจความไว้ แต่รายละเอียดหายไป เงื่อนไขสำคัญควรพิมพ์ย้ำหลังคุยมานาน</p>
     <div class="presets" id="w-controls">
       <button data-act="send">ส่งข้อความ</button>
       <button data-act="turn10">+ เพิ่ม 10 รอบสนทนา</button>
@@ -711,8 +853,31 @@ function initWindow(root) {
     <p>วางข้อความของคุณเองเพื่อดูว่ากินพื้นที่ในหน้าต่างบริบทแค่ไหน</p>
     <textarea id="w-paste" placeholder="วางอีเมล รายงาน หรืออะไรก็ได้ตรงนี้"></textarea>
     <p class="muted notice-fade" id="w-trunc" style="display:none">นับแค่ 200,000 ตัวอักษรแรกของสิ่งที่คุณวาง ส่วนที่เหลือถูกตัดออกไป</p>
-    <p class="takeaway" id="w-takeaway">เมื่อแถบเต็ม รอบสนทนาที่เก่าที่สุดจะถูกดันออกไป
-    นั่นแหละคือความหมายจริง ๆ ของ "มันลืมที่เราพูดไปแล้ว"</p>`;
+    <p class="takeaway" id="w-takeaway"></p>`;
+
+  // Single source of truth for "attachments as packContext sees them" — the
+  // paste box's live token count folds in as one more attachment exactly
+  // like a clicked-in file would. Both updateBar() and every
+  // deriveCompaction() call below read this so the bar, the two packContext
+  // passes compaction runs internally, and the beat-by-beat send animation
+  // can never disagree about what's competing for space.
+  function currentAttachments() {
+    return state.pasted ? [...state.attachments, state.pasted] : state.attachments;
+  }
+
+  const modeInputs = root.querySelectorAll('input[name="w-mode"]');
+  modeInputs.forEach((inp) => {
+    inp.addEventListener('change', () => {
+      if (!inp.checked) return;
+      state.mode = inp.value;
+      // Switching modes changes what "this chip" even means (a raw turn vs.
+      // a folded-in summary standing in for many), so any in-flight
+      // fade-out tracking from the previous mode would misfire against
+      // unrelated chips — start clean rather than carry it across.
+      prevDropped = new Set();
+      render();
+    });
+  });
 
   const controls = root.querySelector('#w-controls');
   for (const att of CONFIG.attachments) {
@@ -799,7 +964,13 @@ function initWindow(root) {
     const step = () => {
       if (myRun !== sendRunToken) return; // superseded by reset or another send
       const beat = beats[i];
-      updateBar([...state.turns, beat.hist], beat.think);
+      // Routed through deriveCompaction so the bar an in-flight send draws
+      // never contradicts the settled picture render() lands on a moment
+      // later — in สรุปย่อ mode, the beat that would overflow the raw window
+      // shows the already-folded-in summary, not a bar about to visibly
+      // "jump" smaller the instant finalize() below calls render().
+      const { pseudoTurns } = deriveCompaction([...state.turns, beat.hist], currentAttachments(), state.mode);
+      updateBar(pseudoTurns, beat.think);
       turnStatus.textContent = beat.status;
       i++;
       if (i < beats.length) {
@@ -869,7 +1040,7 @@ function initWindow(root) {
   // under reduced motion, how the reduced-motion path gets an instant jump
   // instead, with zero extra branching needed here for the visual side.
   function updateBar(turnsForDisplay, thinkingTokens) {
-    const attachments = state.pasted ? [...state.attachments, state.pasted] : state.attachments;
+    const attachments = currentAttachments();
     const r = packContext({
       windowTokens: CONFIG.windowTokens,
       systemTokens: CONFIG.systemPromptTokens,
@@ -925,56 +1096,104 @@ function initWindow(root) {
   }
 
   function render() {
-    const r = updateBar(state.turns, 0);
-    root.querySelector('#w-summary').textContent = r.overflow
+    // deriveCompaction() is the only place that decides evict vs. compact —
+    // render() just draws whatever it returns. `chips` and `pseudoTurns`
+    // stay index-aligned (see deriveCompaction()'s own comment), so the
+    // single `r.dropped` from this one updateBar() call is enough to know
+    // which *chips* are struck through, in either mode.
+    const { pseudoTurns, chips, summaryInfo } = deriveCompaction(state.turns, currentAttachments(), state.mode);
+    const r = updateBar(pseudoTurns, 0);
+    // deriveCompaction()'s convergence loop grows the folded span until the
+    // recap fits — but it gives up at rawTurns.length turns folded in, so an
+    // attachment load pinned right at the edge of the window can still leave
+    // even a fully-collapsed recap (MAX_SUMMARY_TOKENS) not fitting the
+    // sliver of budget left. `summaryInfo` alone can't be trusted as "the
+    // compacted view settled" in that case — it would narrate specific
+    // before/after numbers for a chip that this exact updateBar() call just
+    // struck through and excluded from usedTokens, which is exactly the
+    // "page says one thing, the numbers say another" a sharp attendee would
+    // catch. Falls through to the same honest "nothing fits" framing as
+    // ตัดทิ้ง's real overflow instead of the compacted-summary sentence.
+    const summarySettled = summaryInfo && r.dropped.length === 0;
+
+    root.querySelector('#w-summary').textContent = (r.overflow || (summaryInfo && !summarySettled))
       ? (CONFIG.systemPromptTokens + r.attachmentTokens > CONFIG.windowTokens
         ? `แค่คำสั่งระบบกับไฟล์แนบก็ปาไป ${(CONFIG.systemPromptTokens + r.attachmentTokens).toLocaleString()} โทเค็นแล้ว — มากกว่าหน้าต่างบริบททั้งหมดที่มี ${CONFIG.windowTokens.toLocaleString()} โทเค็น จึงไม่เหลือที่ให้อย่างอื่นเลย`
         : `คำสั่งระบบ ไฟล์แนบ และประวัติแชท กินพื้นที่จนไม่เหลือที่ไว้ตอบกลับ โมเดลจึงไม่มีที่เหลือให้ตอบคุณแล้ว`)
-      : `ใช้ไป ${r.usedTokens.toLocaleString()} จาก ${CONFIG.windowTokens.toLocaleString()} โทเค็น · ดันออก ${r.dropped.length} รอบสนทนา`;
+      : summarySettled
+        ? `ใช้ไป ${r.usedTokens.toLocaleString()} จาก ${CONFIG.windowTokens.toLocaleString()} โทเค็น · สรุปย่อ ${summaryInfo.count.toLocaleString()} รอบเก่า จาก ${summaryInfo.before.toLocaleString()} เหลือ ${summaryInfo.after.toLocaleString()} โทเค็น (${summaryInfo.before ? Math.round(summaryInfo.after / summaryInfo.before * 100) : 0}%)`
+        : `ใช้ไป ${r.usedTokens.toLocaleString()} จาก ${CONFIG.windowTokens.toLocaleString()} โทเค็น · ดันออก ${r.dropped.length} รอบสนทนา`;
+
+    // The old, unconditional "oldest turns get pushed out" claim is only
+    // true in ตัดทิ้ง mode — สรุปย่อ genuinely doesn't discard them the same
+    // way, so the takeaway itself has to switch with the toggle instead of
+    // quietly becoming false half the time. See the mode-note above the
+    // toggle for the general "which tool does which" framing; this is the
+    // specific, mode-accurate version of that same idea.
+    root.querySelector('#w-takeaway').textContent = state.mode === 'compact'
+      ? 'เมื่อแถบเต็ม รอบสนทนาที่เก่าที่สุดจะถูกสรุปย่อรวมเป็นก้อนเดียว ไม่ได้หายไปเฉย ๆ แต่รายละเอียดปลีกย่อยก็ไม่เหลือเหมือนกัน'
+      : 'เมื่อแถบเต็ม รอบสนทนาที่เก่าที่สุดจะถูกดันออกไป นั่นแหละคือความหมายจริง ๆ ของ "มันลืมที่เราพูดไปแล้ว"';
+
     const list = root.querySelector('#w-turns');
     list.textContent = '';
     const dropped = new Set(r.dropped);
     const newlyDropped = [];
-    function buildTurn(i) {
+    // A logical identity for a chip that survives it moving position between
+    // renders (สรุปย่อ mode always rebuilds the summary from scratch — see
+    // deriveCompaction() — so "the same" summary chip can sit at a different
+    // array position next render even though nothing about it changed).
+    function chipKey(chip) { return chip.kind === 'summary' ? 'summary' : `turn:${chip.index}`; }
+    function chipLabel(chip) {
+      if (chip.kind === 'summary') {
+        const pct = chip.before ? Math.round(chip.after / chip.before * 100) : 0;
+        return `สรุปการคุยก่อนหน้า ${chip.count.toLocaleString()} รอบ: ${chip.before.toLocaleString()} → ${chip.after.toLocaleString()} โทเค็น (เหลือ ${pct}%)`;
+      }
+      return `รอบที่ ${chip.index + 1} · ${chip.tokens.toLocaleString()}`;
+    }
+    function buildChip(pos) {
+      const chip = chips[pos];
       const el = document.createElement('span');
-      const isNew = dropped.has(i) && !prevDropped.has(i);
-      // Newly-evicted turns are appended WITHOUT '.gone' so they paint once
+      const isNew = dropped.has(pos) && !prevDropped.has(chipKey(chip));
+      // Newly-evicted chips are appended WITHOUT '.gone' so they paint once
       // in their normal state; '.gone' (and the fade it triggers) is added
-      // a couple of frames later. Turns dropped in an earlier render are
+      // a couple of frames later. Chips dropped in an earlier render are
       // created already-'.gone' — that's a no-op state, not an animation,
       // so history never replays.
-      el.className = 'turn' + (dropped.has(i) && !isNew ? ' gone' : '');
-      el.textContent = `รอบที่ ${i + 1} · ${state.turns[i].toLocaleString()}`;
+      el.className = 'turn' +
+        (chip.kind === 'summary' ? ' turn-summary' : '') +
+        (dropped.has(pos) && !isNew ? ' gone' : '');
+      el.textContent = chipLabel(chip);
       list.append(el);
       if (isNew) newlyDropped.push(el);
     }
     // A long conversation (or a big "+ เพิ่ม 10" spree) can pile up hundreds
-    // of turns, and nobody reads chip #200. Show the first few (always wide
+    // of chips, and nobody reads chip #200. Show the first few (always wide
     // enough to cover r.dropped, which — per packContext — is always the
-    // oldest, lowest-indexed turns, so every evicted turn stays visible and
+    // oldest, lowest-position chips, so every evicted chip stays visible and
     // never hides inside the collapsed middle) and the last few (the current
     // end of the conversation), with a marker in between stating exactly how
-    // many ordinary, still-kept turns are hidden. #w-summary's dropped count
-    // is unaffected by any of this — it's read from `r`, not from the DOM.
+    // many ordinary, still-kept chips are hidden. #w-summary's numbers are
+    // unaffected by any of this — they're read from `r`/`summaryInfo`, not
+    // from the DOM.
     const HEAD_MIN = 5, TAIL = 5;
-    const total = state.turns.length;
+    const total = chips.length;
     const headCount = Math.min(total, Math.max(HEAD_MIN, r.dropped.length));
     if (total <= headCount + TAIL) {
-      for (let i = 0; i < total; i++) buildTurn(i);
+      for (let i = 0; i < total; i++) buildChip(i);
     } else {
-      for (let i = 0; i < headCount; i++) buildTurn(i);
+      for (let i = 0; i < headCount; i++) buildChip(i);
       const gap = document.createElement('span');
       gap.className = 'turn turn-gap';
       gap.textContent = `…อีก ${(total - headCount - TAIL).toLocaleString()} รอบ…`;
       list.append(gap);
-      for (let i = total - TAIL; i < total; i++) buildTurn(i);
+      for (let i = total - TAIL; i < total; i++) buildChip(i);
     }
     if (newlyDropped.length) {
       requestAnimationFrame(() => requestAnimationFrame(() => {
         for (const el of newlyDropped) el.classList.add('gone');
       }));
     }
-    prevDropped = dropped;
+    prevDropped = new Set(r.dropped.map(pos => chipKey(chips[pos])));
   }
 
   render();
