@@ -26,6 +26,19 @@
      part of a letter" state — dashed border + dimmed, never removed or
      merged, so the chip and the token count stay truthful. */
   .chip.chip-partial { border:1px dashed var(--muted); opacity:.6; }
+  /* Roving-focus highlight for demo 1: #tk-chips itself is the only tab
+     stop (see initTokenizer) so the up-to-1200 chips never become 1200 tab
+     stops; arrow keys move a virtual "current" index and this marks it. */
+  .chip.current { outline:2px solid var(--accent); outline-offset:1px; }
+  /* Screen-reader-only: kept in the accessibility tree (not display:none)
+     so aria-live regions using it still announce, but removed from visual
+     flow so it never affects any slide's layout height. */
+  .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+  /* Visible focus ring for the keyboard-focusable data elements added for
+     accessibility (bar segments, chart columns, the chip group) — the
+     default browser outline on a plain div can be too faint on this dark
+     background. */
+  #tk-chips:focus-visible, .seg[tabindex]:focus-visible, .col[tabindex]:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
   .stats { display:flex; gap:20px; flex-wrap:wrap; font-variant-numeric:tabular-nums; }
   .stats b { font-size:22px; }
   .presets { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
@@ -34,7 +47,13 @@
   .takeaway { border-left:3px solid var(--accent); padding-left:12px; margin:16px 0; }
   .bar { display:flex; height:44px; border:1px solid var(--line); border-radius:8px; overflow:hidden; margin:14px 0; }
   .seg { display:flex; align-items:center; justify-content:center; font-size:12px; overflow:hidden; white-space:nowrap; }
-  .seg-sys { background:#3d5a80; } .seg-att { background:#8a5a44; } .seg-hist { background:#4f7942; } .seg-reply { background:#5c4b8a; } .seg-free { background:#20242d; }
+  /* seg-att and seg-hist were darkened from their original #8a5a44 / #4f7942
+     (4.73:1 / 4.14:1 against --fg #e8e8ea) to clear WCAG AA's 4.5:1 body-text
+     threshold with margin (computed 5.06:1 / 5.07:1) — see PRODUCT.md's
+     "verified, not assumed" contrast commitment. Hue is preserved so the
+     segments stay visually distinguishable from each other and from
+     seg-sys/seg-reply/seg-free, which already cleared 4.5:1 unchanged. */
+  .seg-sys { background:#3d5a80; } .seg-att { background:#845641; } .seg-hist { background:#466a3a; } .seg-reply { background:#5c4b8a; } .seg-free { background:#20242d; }
   .bar.overflow { border-color: var(--warn); box-shadow: 0 0 0 2px var(--warn) inset; }
   .turnlist { display:flex; flex-wrap:wrap; gap:6px; }
   .turn { padding:4px 8px; border:1px solid var(--line); border-radius:6px; font-size:13px; }
@@ -428,7 +447,10 @@ function initTokenizer(root) {
       <div><b id="tk-chars">0</b><br><span class="muted">ตัวอักษร</span></div>
       <div><b id="tk-ratio">0</b><br><span class="muted">ตัวอักษรต่อโทเค็น</span></div>
     </div>
-    <div class="chips" id="tk-chips"></div>
+    <p class="sr-only" id="tk-live" aria-live="polite" aria-atomic="true"></p>
+    <div class="chips" id="tk-chips" tabindex="0" role="group"
+         aria-label="ชิปโทเค็นที่แบ่งได้ กดปุ่มลูกศรซ้ายหรือขวาเพื่ออ่านทีละชิ้น"></div>
+    <p class="muted sr-only" id="tk-chip-readout" aria-live="polite" aria-atomic="true"></p>
     <p class="muted notice-fade" id="tk-chip-cap" style="display:none">แสดงแค่ ${MAX_CHIPS.toLocaleString()}
     ชิ้นแรกเท่านั้น ตัวเลขจำนวนโทเค็นด้านบนรวมส่วนที่เหลือไว้แล้ว เพียงแต่ไม่ได้วาดให้ดู</p>
     <p class="muted notice-fade" id="tk-partial" style="display:none">ตัวอักษรไทยหนึ่งตัวมักถูกแบ่งเป็นหลายโทเค็น
@@ -440,6 +462,8 @@ function initTokenizer(root) {
 
   const input = root.querySelector('#tk-input');
   const chips = root.querySelector('#tk-chips');
+  const liveEl = root.querySelector('#tk-live');
+  const chipReadout = root.querySelector('#tk-chip-readout');
 
   const presetBar = root.querySelector('.presets');
   for (const preset of PRESETS) {
@@ -449,18 +473,70 @@ function initTokenizer(root) {
     presetBar.append(b);
   }
 
+  // #tk-chips is a single tab stop (see its tabindex in the template above)
+  // rather than up to MAX_CHIPS (1200) individual ones — tabbing through
+  // 1200 chips would be its own accessibility failure. Arrow keys move a
+  // "virtual" current index instead; describeChip()/focusChip() below both
+  // move a visible outline (.chip.current) and push a composed sentence
+  // into #tk-chip-readout, which is a live region so it also reaches screen
+  // readers, and is only made visually visible while #tk-chips has focus so
+  // it never costs the slide permanent layout height (see .sr-only).
+  let visibleTokens = [];
+  let chipIndex = -1;
+  function describeChip(i) {
+    const tok = visibleTokens[i];
+    const shown = tok.text.replace(/\n/g, '\\n') || '(ว่าง)';
+    return `ชิ้นที่ ${i + 1} จาก ${visibleTokens.length}: "${shown}" รหัส ${tok.id}`;
+  }
+  function focusChip(i) {
+    const prevEl = chips.querySelector('.chip.current');
+    if (prevEl) prevEl.classList.remove('current');
+    chipIndex = i;
+    if (i < 0 || !visibleTokens[i]) { chipReadout.textContent = ''; return; }
+    const el = chips.children[i];
+    if (el) el.classList.add('current');
+    chipReadout.textContent = describeChip(i);
+  }
+  chips.addEventListener('keydown', (e) => {
+    if (!visibleTokens.length) return;
+    const last = visibleTokens.length - 1;
+    if (e.key === 'ArrowRight') { e.preventDefault(); focusChip(Math.min(last, chipIndex < 0 ? 0 : chipIndex + 1)); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); focusChip(Math.max(0, chipIndex < 0 ? 0 : chipIndex - 1)); }
+    else if (e.key === 'Home') { e.preventDefault(); focusChip(0); }
+    else if (e.key === 'End') { e.preventDefault(); focusChip(last); }
+  });
+  chips.addEventListener('focus', () => {
+    chipReadout.classList.remove('sr-only');
+    if (visibleTokens.length) focusChip(0);
+  });
+  chips.addEventListener('blur', () => {
+    const prevEl = chips.querySelector('.chip.current');
+    if (prevEl) prevEl.classList.remove('current');
+    chipIndex = -1;
+    chipReadout.textContent = '';
+    chipReadout.classList.add('sr-only');
+  });
+
   function render() {
     const text = input.value.slice(0, 20000);
     root.querySelector('#tk-trunc').style.display = input.value.length > 20000 ? '' : 'none';
     const count = countTokens(text);
+    const ratioStr = count ? (text.length / count).toFixed(1) : '0';
     root.querySelector('#tk-tokens').textContent = count.toLocaleString();
     root.querySelector('#tk-chars').textContent = text.length.toLocaleString();
-    root.querySelector('#tk-ratio').textContent = count ? (text.length / count).toFixed(1) : '0';
+    root.querySelector('#tk-ratio').textContent = ratioStr;
+    // Composed sentence, not bare digits, so a screen reader announces what
+    // changed rather than three disconnected numbers.
+    liveEl.textContent = text
+      ? `ข้อความนี้มี ${count.toLocaleString()} โทเค็น จาก ${text.length.toLocaleString()} ตัวอักษร เฉลี่ย ${ratioStr} ตัวอักษรต่อโทเค็น`
+      : 'ยังไม่มีข้อความ';
     chips.textContent = '';
+    visibleTokens = [];
     if (APPROXIMATE) {
       chips.innerHTML = '<span class="muted">มุมมองการแบ่งชิ้นต้องใช้ตัวตัดคำเป็นโทเค็น ซึ่งโหลดไม่สำเร็จ</span>';
       root.querySelector('#tk-chip-cap').style.display = 'none';
       root.querySelector('#tk-partial').style.display = 'none';
+      focusChip(-1);
       return;
     }
     const tokens = encodeDetailed(RANKS, text);
@@ -471,7 +547,8 @@ function initTokenizer(root) {
     // The count itself (`tokens.length`, already reflected in #tk-tokens)
     // is untouched by this — only how such a chip is drawn changes.
     let hasPartial = false;
-    for (const tok of tokens.slice(0, MAX_CHIPS)) {
+    visibleTokens = tokens.slice(0, MAX_CHIPS);
+    for (const tok of visibleTokens) {
       const el = document.createElement('span');
       const isPartial = tok.text.includes('�');
       if (isPartial) hasPartial = true;
@@ -481,6 +558,11 @@ function initTokenizer(root) {
       chips.append(el);
     }
     root.querySelector('#tk-partial').style.display = hasPartial ? '' : 'none';
+    // Re-render rebuilds every chip <span> from scratch; if the chip group
+    // already had keyboard focus, keep the readout in sync with the new
+    // chips instead of pointing at now-detached elements.
+    if (document.activeElement === chips) focusChip(visibleTokens.length ? 0 : -1);
+    else chipIndex = -1;
   }
 
   let timer;
@@ -499,12 +581,13 @@ function initWindow(root) {
     <p>ทุกอย่างที่โมเดลเก็บไว้ในหัวพร้อมกันได้ — ${CONFIG.windowTokens.toLocaleString()} โทเค็น สำหรับ
     ${CONFIG.model} ทั้งหมดนี้อยู่ในแถบเดียวกัน</p>
     <div class="bar" id="w-bar"></div>
+    <p class="muted sr-only" id="w-seg-readout" aria-hidden="true"></p>
     <div class="presets" id="w-controls">
       <button data-act="turn">+ เพิ่ม 1 รอบสนทนา</button>
       <button data-act="turn10">+ เพิ่ม 10 รอบสนทนา</button>
       <button data-act="reset">รีเซ็ต</button>
     </div>
-    <p class="muted" id="w-summary"></p>
+    <p class="muted" id="w-summary" aria-live="polite" aria-atomic="true"></p>
     <div class="turnlist" id="w-turns"></div>
     <p>วางข้อความของคุณเองเพื่อดูว่ากินพื้นที่ในหน้าต่างบริบทแค่ไหน</p>
     <textarea id="w-paste" placeholder="วางอีเมล รายงาน หรืออะไรก็ได้ตรงนี้"></textarea>
@@ -536,6 +619,25 @@ function initWindow(root) {
     root.querySelector('#w-trunc').style.display = 'none';
     render();
   };
+
+  // Bar segments carry their label + exact count in aria-label (and title,
+  // for mouse hover) and are individually focusable — only 5 of them, so
+  // unlike demo 1's up-to-1200 chips this doesn't create tab-stop clutter.
+  // A segment at 0 tokens is skipped (nothing to read) so tabbing never
+  // lands on an invisible zero-width stop. #w-seg-readout mirrors the
+  // focused segment's text visibly for sighted keyboard users — screen
+  // readers already get it from the segment's own aria-label, so the
+  // readout is aria-hidden to avoid a double announcement.
+  const segReadout = root.querySelector('#w-seg-readout');
+  root.querySelector('#w-bar').addEventListener('focusin', (e) => {
+    const label = e.target.getAttribute('aria-label');
+    if (!label) return;
+    segReadout.textContent = label;
+    segReadout.classList.remove('sr-only');
+  });
+  root.querySelector('#w-bar').addEventListener('focusout', () => {
+    segReadout.classList.add('sr-only');
+  });
 
   const paste = root.querySelector('#w-paste');
   const trunc = root.querySelector('#w-trunc');
@@ -587,7 +689,12 @@ function initWindow(root) {
       const pct = (tokens / denom) * 100;
       el.style.width = `${pct}%`;
       el.textContent = pct > 6 ? label : '';
-      el.title = `${label}: ${tokens.toLocaleString()} โทเค็น`;
+      const desc = `${label}: ${tokens.toLocaleString()} โทเค็น`;
+      el.title = desc;
+      if (tokens > 0) {
+        el.tabIndex = 0;
+        el.setAttribute('aria-label', desc);
+      }
       bar.append(el);
     }
     root.querySelector('#w-summary').textContent = r.overflow
@@ -660,6 +767,7 @@ function initBurn(root) {
     <div class="presets" id="b-controls">
       <button type="button" id="b-play">${BURN_LABELS.playIdle}</button>
     </div>
+    <p class="sr-only" id="b-live" aria-live="polite" aria-atomic="true"></p>
     <div class="split2">
       <div>
         <h3>แชทยาวเส้นเดียว</h3>
@@ -674,6 +782,7 @@ function initBurn(root) {
         <p class="muted">ประมวลผลรวม: <b id="b-split-total">${splitTotalStr}</b> โทเค็น</p>
       </div>
     </div>
+    <p class="muted sr-only" id="b-col-readout" aria-hidden="true"></p>
     <p>นั่นคืองานที่มากกว่าถึง <b>${(long.at(-1).cumulative / split.at(-1).cumulative).toFixed(1)} เท่า</b>
     สำหรับบทสนทนาชุดเดียวกัน — นี่คือเหตุผลที่แชทยาว ๆ ยิ่งคุยยิ่งช้า และกินโควตาการใช้งานเร็วขึ้นเรื่อย ๆ</p>
     <details>
@@ -702,30 +811,50 @@ function initBurn(root) {
   // from what shipped before; grouping only changes how the .col elements
   // are nested (into .task-group wrappers) for layout, and armGrowIn is
   // handed that same flat array exactly as it always was.
-  const draw = (id, series, cls) => {
+  // Shared visible readout for both charts' columns: screen readers already
+  // get the per-column detail from each .col's own aria-label (set below),
+  // so this is aria-hidden and exists only so a sighted keyboard user who
+  // tabs onto a column — instead of hovering it — can see the same text
+  // the mouse title would have shown. 40 columns (20 per chart) is a small,
+  // finite dataset, so unlike demo 1's up-to-1200 chips they're each an
+  // ordinary tab stop rather than needing roving-focus.
+  const colReadout = root.querySelector('#b-col-readout');
+  const draw = (id, series, cls, seriesLabel) => {
     const box = root.querySelector(id);
     const cols = [];
     let idx = 0;
-    for (const size of groupSizes) {
+    groupSizes.forEach((size, groupIdx) => {
       const group = document.createElement('div');
       group.className = 'task-group';
       group.style.flex = String(size);
       for (let k = 0; k < size; k++) {
+        const turnNumber = idx + 1;
         const point = series[idx++];
         const col = document.createElement('div');
         col.className = `col ${cls}`;
         col.style.height = `${(point.processed / peak) * 100}%`;
-        col.title = `${point.processed.toLocaleString()} โทเค็นที่ประมวลผลในรอบนี้`;
+        const desc = `${seriesLabel} · ${BURN_LABELS.taskGroups[groupIdx]} รอบที่ ${turnNumber}: ` +
+          `ประมวลผล ${point.processed.toLocaleString()} โทเค็นในรอบนี้`;
+        col.title = desc;
+        col.tabIndex = 0;
+        col.setAttribute('aria-label', desc);
         group.append(col);
         cols.push(col);
       }
       box.append(group);
-    }
+    });
+    box.addEventListener('focusin', (e) => {
+      const label = e.target.getAttribute('aria-label');
+      if (!label) return;
+      colReadout.textContent = label;
+      colReadout.classList.remove('sr-only');
+    });
+    box.addEventListener('focusout', () => colReadout.classList.add('sr-only'));
     armGrowIn(box, cols);
     return cols;
   };
-  const longCols = draw('#b-long', long, '');
-  const splitCols = draw('#b-split', split, 'alt');
+  const longCols = draw('#b-long', long, '', 'แชทยาวเส้นเดียว');
+  const splitCols = draw('#b-split', split, 'alt', 'แยกแชททุก 7 รอบ');
 
   // Play control: both charts are fully drawn at rest (armGrowIn's own
   // reveal already handles that on scroll-in) — an attendee who never
@@ -747,7 +876,20 @@ function initBurn(root) {
   const playBtn = root.querySelector('#b-play');
   const longTotalEl = root.querySelector('#b-long-total');
   const splitTotalEl = root.querySelector('#b-split-total');
+  const liveEl = root.querySelector('#b-live');
   const STEP_MS = 160; // ~3.2s for all 20 turns — within the 120-200ms/turn, 3-4s total target
+
+  // Playback fires every STEP_MS for TURNS steps — announcing all 20 would
+  // be unusable spam, so this only speaks at the first step, every 5th
+  // step, and the final step: 5 announcements spread across the ~3.2s run
+  // instead of 20. The totals themselves still visibly update every step
+  // for sighted users; only the screen-reader channel is throttled.
+  const announceBurn = (i, done) => {
+    liveEl.textContent = done
+      ? `เล่นจบแล้ว แชทยาวเส้นเดียวประมวลผลรวม ${longTotalStr} โทเค็น ถ้าแยกแชททุก 7 รอบรวม ${splitTotalStr} โทเค็น`
+      : `รอบที่ ${i + 1} จาก ${TURNS}: แชทยาวเส้นเดียวสะสม ${long[i].cumulative.toLocaleString()} โทเค็น ` +
+        `ถ้าแยกแชทสะสม ${split[i].cumulative.toLocaleString()} โทเค็น`;
+  };
 
   let runToken = 0; // invalidates a stale timer chain if play is pressed again mid-run
   const setState = (state) => {
@@ -761,6 +903,7 @@ function initBurn(root) {
     for (const col of splitCols) col.classList.add('in');
     longTotalEl.textContent = longTotalStr;
     splitTotalEl.textContent = splitTotalStr;
+    announceBurn(TURNS - 1, true);
   };
 
   playBtn.addEventListener('click', () => {
@@ -786,6 +929,7 @@ function initBurn(root) {
       splitCols[i].classList.add('in');
       longTotalEl.textContent = long[i].cumulative.toLocaleString();
       splitTotalEl.textContent = split[i].cumulative.toLocaleString();
+      if (i === 0 || (i + 1) % 5 === 0) announceBurn(i, i === TURNS - 1);
       i++;
       if (i < TURNS) setTimeout(step, STEP_MS);
       else setState('done');
@@ -877,22 +1021,40 @@ function initHaystack(root) {
       <div class="h-vals">${LITERATURE_CURVE.points.map(p => `<div>${Math.round(p.accuracy * 100)}%</div>`).join('')}</div>
       <div class="cols" id="h-curve"></div>
       <div class="h-pos">${LITERATURE_CURVE.points.map(p => `<div>${haystackPosLabel(p.depth)}</div>`).join('')}</div>
+      <p class="muted sr-only" id="h-col-readout" aria-hidden="true"></p>
       <p class="muted">เป็นตัวเลขโดยประมาณ อ่านจากกราฟที่เผยแพร่ไว้ ไม่ใช่ตัวเลขที่แม่นยำเป๊ะ ความแม่นยำในการจำลดลงจาก
       ${Math.round(first.accuracy * 100)}% ใกล้ต้นเรื่อง เหลือ ${Math.round(worst.accuracy * 100)}% ตรงกลางเรื่อง
       แล้วกลับขึ้นไปที่ ${Math.round(last.accuracy * 100)}% ท้ายเรื่อง
       แหล่งที่มา: ${LITERATURE_CURVE.source} ไม่มีการเรียกใช้โมเดลจริงในตัวอย่างนี้</p>
       <p class="takeaway">ถามคำถามจริงของคุณไว้ต้น ๆ และทำเนื้อหาให้สั้นพอ ไม่ให้คำตอบจมหายไปตรงกลาง</p>`;
     const box = root.querySelector('#h-curve');
+    // Only 5 columns, each individually focusable and labelled — same
+    // reasoning as demo 2's bar segments, well short of demo 1's
+    // roving-focus threshold. #h-col-readout mirrors the focused column's
+    // text for sighted keyboard users; screen readers get it directly from
+    // the column's own aria-label, so the readout is aria-hidden.
+    const colReadout = root.querySelector('#h-col-readout');
     const cols = [];
     for (const p of LITERATURE_CURVE.points) {
       const isMiddle = p.depth > 0 && p.depth < 1;
       const col = document.createElement('div');
       col.className = 'col' + (isMiddle ? ' mid' : '');
       col.style.height = `${p.accuracy * 100}%`;
-      col.title = `${Math.round(p.depth * 100)}% ของเอกสาร: จำได้ ${Math.round(p.accuracy * 100)}% (ค่าประมาณ)`;
+      const desc = `${haystackPosLabel(p.depth)} (${Math.round(p.depth * 100)}% ของเอกสาร): ` +
+        `จำได้ ${Math.round(p.accuracy * 100)}% (ค่าประมาณ)`;
+      col.title = desc;
+      col.tabIndex = 0;
+      col.setAttribute('aria-label', desc);
       box.append(col);
       cols.push(col);
     }
+    box.addEventListener('focusin', (e) => {
+      const label = e.target.getAttribute('aria-label');
+      if (!label) return;
+      colReadout.textContent = label;
+      colReadout.classList.remove('sr-only');
+    });
+    box.addEventListener('focusout', () => colReadout.classList.add('sr-only'));
     armGrowIn(box, cols);
     appendLivePanel(root);
     return;
