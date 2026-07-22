@@ -583,6 +583,17 @@ function initTokenizer(root) {
   input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(render, 120); });
   render();
 }
+// One "turn" is a user message plus the model's reply. Real exchanges don't
+// grow — they vary: a one-word confirmation, an ordinary question and
+// answer, a request that needs a real explanation, a pasted error message
+// or code snippet the model has to read before it can respond. These ten
+// sizes are rough token counts for exactly those shapes (short confirm ~70,
+// ordinary Q&A ~150-650, a longer explanation ~950-1150, a paste-and-diagnose
+// exchange up to ~1450) and repeat in this order — fixed, not random, so a
+// presenter demoing this twice gets the same chips both times, and the
+// pattern stays visibly non-monotonic no matter how many turns pile up.
+const TURN_SIZES = [140, 620, 90, 1450, 340, 980, 210, 70, 1150, 480];
+
 function initWindow(root) {
   const state = { attachments: [], turns: [], pasted: 0 };
   // Tracks which turn indices were already evicted as of the previous
@@ -599,6 +610,7 @@ function initWindow(root) {
     <div class="presets" id="w-controls">
       <button data-act="turn">+ เพิ่ม 1 รอบสนทนา</button>
       <button data-act="turn10">+ เพิ่ม 10 รอบสนทนา</button>
+      <button data-act="fill">+ คุยยาว ๆ จนดันรอบเก่าออก</button>
       <button data-act="reset">รีเซ็ต</button>
     </div>
     <p class="muted" id="w-summary" aria-live="polite" aria-atomic="true"></p>
@@ -617,7 +629,28 @@ function initWindow(root) {
     controls.prepend(b);
   }
   function addTurn() {
-    state.turns.push(900 + Math.round(state.turns.length * 260));
+    state.turns.push(TURN_SIZES[state.turns.length % TURN_SIZES.length]);
+  }
+  // A real 200,000-token window takes on the order of a few hundred
+  // realistically-sized turns to fill — clicking "+ 1" or "+ 10" that many
+  // times isn't a live-demo-able way to reach the one moment (eviction) this
+  // whole demo exists to show. This plays out that many turns in a single
+  // click, using the exact same addTurn() sizes and packContext budget as
+  // every other button here, and stops the instant the first turn would be
+  // pushed out — nothing about the numbers is faked, only the clicking.
+  function fillUntilEviction() {
+    for (let guard = 0; guard < 5000; guard++) {
+      addTurn();
+      const attachments = state.pasted ? [...state.attachments, state.pasted] : state.attachments;
+      const r = packContext({
+        windowTokens: CONFIG.windowTokens,
+        systemTokens: CONFIG.systemPromptTokens,
+        replyReserve: CONFIG.replyReserveTokens,
+        attachments,
+        turns: state.turns
+      });
+      if (r.dropped.length > 0) break;
+    }
   }
   controls.querySelector('[data-act="turn"]').onclick = () => {
     addTurn();
@@ -625,6 +658,10 @@ function initWindow(root) {
   };
   controls.querySelector('[data-act="turn10"]').onclick = () => {
     for (let i = 0; i < 10; i++) addTurn();
+    render();
+  };
+  controls.querySelector('[data-act="fill"]').onclick = () => {
+    fillUntilEviction();
     render();
   };
   controls.querySelector('[data-act="reset"]').onclick = () => {
