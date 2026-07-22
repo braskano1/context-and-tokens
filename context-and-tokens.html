@@ -595,6 +595,14 @@ function initTokenizer(root) {
 // pattern stays visibly non-monotonic no matter how many turns pile up.
 const TURN_SIZES = [140, 620, 90, 1450, 340, 980, 210, 70, 1150, 480];
 
+// The one place that decides "what size is the next turn" — both addTurn()
+// and simulateFill() below call this instead of indexing TURN_SIZES
+// themselves, so there's only one expression that could ever get the cycle
+// wrong.
+function nextTurnSize(turns) {
+  return TURN_SIZES[turns.length % TURN_SIZES.length];
+}
+
 // Pushes realistically-sized turns (cycling through TURN_SIZES, continuing
 // from wherever `turns` already is) onto the given array until packContext
 // reports the first eviction, then returns that result. `turns` is mutated
@@ -604,7 +612,7 @@ const TURN_SIZES = [140, 620, 90, 1450, 340, 980, 210, 70, 1150, 480];
 // below can never drift into disagreement about what "a turn" costs.
 function simulateFill(turns, attachments) {
   for (let guard = 0; guard < 5000; guard++) {
-    turns.push(TURN_SIZES[turns.length % TURN_SIZES.length]);
+    turns.push(nextTurnSize(turns));
     const r = packContext({
       windowTokens: CONFIG.windowTokens,
       systemTokens: CONFIG.systemPromptTokens,
@@ -666,7 +674,7 @@ function initWindow(root) {
     controls.prepend(b);
   }
   function addTurn() {
-    state.turns.push(TURN_SIZES[state.turns.length % TURN_SIZES.length]);
+    state.turns.push(nextTurnSize(state.turns));
   }
   // A real 200,000-token window takes on the order of TURNS_TO_FILL_WINDOW
   // (a few hundred) realistically-sized turns to fill on chat alone —
